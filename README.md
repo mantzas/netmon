@@ -1,2 +1,2 @@
 # netmon
-Network monitoring
+Network monitoring tool
