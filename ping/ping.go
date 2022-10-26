@@ -10,25 +10,30 @@ import (
 	"github.com/mantzas/netmon"
 )
 
+// Config definition.
 type Config struct {
 	Addresses []string
 	Interval  time.Duration
 }
 
+// MetricAPI definition.
 type MetricAPI interface {
 	ReportPing(context.Context, *ping.Statistics) error
 }
 
+// Monitor definition.
 type Monitor struct {
 	logger    netmon.Logger
 	cfg       Config
 	metricAPI MetricAPI
 }
 
+// New constructs a new ping monitor.
 func New(metricAPI MetricAPI, logger netmon.Logger, cfg Config) (*Monitor, error) {
 	return &Monitor{metricAPI: metricAPI, logger: logger, cfg: cfg}, nil
 }
 
+// Monitor starts the measurement.
 func (pm *Monitor) Monitor(ctx context.Context) {
 	tc := time.NewTicker(pm.cfg.Interval)
 
