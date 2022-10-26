@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/mantzas/netmon"
+	"github.com/mantzas/netmon/ping"
+	"github.com/mantzas/netmon/speed"
 )
 
 func main() {
@@ -33,12 +35,12 @@ func main() {
 	chSignal := make(chan os.Signal, 1)
 	signal.Notify(chSignal, os.Interrupt, syscall.SIGTERM)
 
-	pm, err := netmon.NewPingMonitor(client, logger, cfg.ping)
+	pm, err := ping.New(client, logger, cfg.ping)
 	if err != nil {
 		logger.Fatalln(err)
 	}
 
-	sm, err := netmon.NewSpeedMonitor(ctx, client, logger, cfg.speed)
+	sm, err := speed.New(ctx, client, logger, cfg.speed)
 	if err != nil {
 		logger.Fatalln(err)
 	}
@@ -73,13 +75,11 @@ func main() {
 
 type config struct {
 	influxdb netmon.InfluxDBConfig
-	ping     netmon.PingConfig
-	speed    netmon.SpeedConfig
+	ping     ping.Config
+	speed    speed.Config
 }
 
 func configFromEnv() (config, error) {
-	// speedtest server, ids comma separated
-
 	var err error
 	cfg := config{}
 
@@ -127,25 +127,25 @@ func getInfluxDBConfig() (netmon.InfluxDBConfig, error) {
 	return cfg, nil
 }
 
-func getPingConfig() (netmon.PingConfig, error) {
+func getPingConfig() (ping.Config, error) {
 	var err error
-	cfg := netmon.PingConfig{}
+	cfg := ping.Config{}
 
 	url, err := getEnv("PING_ADDRESSES")
 	if err != nil {
-		return netmon.PingConfig{}, err
+		return ping.Config{}, err
 	}
 
 	cfg.Addresses = strings.Split(url, ",")
 
 	secVal, err := getEnv("PING_INTERVAL_SECONDS")
 	if err != nil {
-		return netmon.PingConfig{}, err
+		return ping.Config{}, err
 	}
 
 	seconds, err := strconv.Atoi(secVal)
 	if err != nil {
-		return netmon.PingConfig{}, fmt.Errorf("failed to convert ping interval: %v", err)
+		return ping.Config{}, fmt.Errorf("failed to convert ping interval: %v", err)
 	}
 
 	cfg.Interval = time.Duration(seconds) * time.Second
@@ -153,20 +153,20 @@ func getPingConfig() (netmon.PingConfig, error) {
 	return cfg, nil
 }
 
-func getSpeedConfig() (netmon.SpeedConfig, error) {
+func getSpeedConfig() (speed.Config, error) {
 	var err error
-	cfg := netmon.SpeedConfig{}
+	cfg := speed.Config{}
 
 	ids, err := getEnv("SPEED_SERVER_IDS")
 	if err != nil {
-		return netmon.SpeedConfig{}, err
+		return speed.Config{}, err
 	}
 
 	for _, id := range strings.Split(ids, ",") {
 
 		serverID, err := strconv.Atoi(id)
 		if err != nil {
-			return netmon.SpeedConfig{}, fmt.Errorf("failed to convert server id [%s]: %v", id, err)
+			return speed.Config{}, fmt.Errorf("failed to convert server id [%s]: %v", id, err)
 		}
 
 		cfg.ServerIDs = append(cfg.ServerIDs, serverID)
@@ -174,12 +174,12 @@ func getSpeedConfig() (netmon.SpeedConfig, error) {
 
 	secVal, err := getEnv("SPEED_INTERVAL_SECONDS")
 	if err != nil {
-		return netmon.SpeedConfig{}, err
+		return speed.Config{}, err
 	}
 
 	seconds, err := strconv.Atoi(secVal)
 	if err != nil {
-		return netmon.SpeedConfig{}, fmt.Errorf("failed to convert speed interval: %v", err)
+		return speed.Config{}, fmt.Errorf("failed to convert speed interval: %v", err)
 	}
 
 	cfg.Interval = time.Duration(seconds) * time.Second

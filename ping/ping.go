@@ -1,4 +1,4 @@
-package netmon
+package ping
 
 import (
 	"context"
@@ -6,28 +6,29 @@ import (
 	"time"
 
 	"github.com/go-ping/ping"
+	"github.com/mantzas/netmon"
 )
 
-type PingConfig struct {
+type Config struct {
 	Addresses []string
 	Interval  time.Duration
 }
 
-type PingMetricAPI interface {
+type MetricAPI interface {
 	ReportPing(context.Context, *ping.Statistics) error
 }
 
-type PingMonitor struct {
-	logger    Logger
-	cfg       PingConfig
-	metricAPI PingMetricAPI
+type Monitor struct {
+	logger    netmon.Logger
+	cfg       Config
+	metricAPI MetricAPI
 }
 
-func NewPingMonitor(metricAPI PingMetricAPI, logger Logger, cfg PingConfig) (*PingMonitor, error) {
-	return &PingMonitor{metricAPI: metricAPI, logger: logger, cfg: cfg}, nil
+func New(metricAPI MetricAPI, logger netmon.Logger, cfg Config) (*Monitor, error) {
+	return &Monitor{metricAPI: metricAPI, logger: logger, cfg: cfg}, nil
 }
 
-func (pm *PingMonitor) Monitor(ctx context.Context) {
+func (pm *Monitor) Monitor(ctx context.Context) {
 	tc := time.NewTicker(pm.cfg.Interval)
 
 	for {
@@ -37,8 +38,8 @@ func (pm *PingMonitor) Monitor(ctx context.Context) {
 		case <-tc.C:
 			tc.Stop()
 			wg := sync.WaitGroup{}
+			wg.Add(len(pm.cfg.Addresses))
 			for _, address := range pm.cfg.Addresses {
-				wg.Add(1)
 				go func(addr string) {
 					pm.measure(ctx, addr)
 					wg.Done()
@@ -50,14 +51,15 @@ func (pm *PingMonitor) Monitor(ctx context.Context) {
 	}
 }
 
-func (pm *PingMonitor) measure(ctx context.Context, address string) {
+func (pm *Monitor) measure(ctx context.Context, address string) {
 	p, err := ping.NewPinger(address)
 	if err != nil {
 		pm.logger.Printf("ping: failed to create pinger: %v\n", err)
 		return
 	}
 
-	p.Count = 10
+	p.Count = 3
+	p.Timeout =  20 * time.Second
 	err = p.Run()
 	if err != nil {
 		pm.logger.Printf("ping: failed to run pinger: %v\n", err)

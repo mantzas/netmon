@@ -1,4 +1,4 @@
-package netmon
+package speed
 
 import (
 	"context"
@@ -6,26 +6,27 @@ import (
 	"sync"
 	"time"
 
+	"github.com/mantzas/netmon"
 	"github.com/showwin/speedtest-go/speedtest"
 )
 
-type SpeedConfig struct {
+type Config struct {
 	ServerIDs []int
 	Interval  time.Duration
 }
 
-type SpeedMetricAPI interface {
+type MetricAPI interface {
 	ReportSpeed(context.Context, *speedtest.Server) error
 }
 
-type SpeedMonitor struct {
-	metricAPI SpeedMetricAPI
-	logger    Logger
-	cfg       SpeedConfig
+type Monitor struct {
+	metricAPI MetricAPI
+	logger    netmon.Logger
+	cfg       Config
 	targets   speedtest.Servers
 }
 
-func NewSpeedMonitor(ctx context.Context, metricAPI SpeedMetricAPI, logger Logger, cfg SpeedConfig) (*SpeedMonitor, error) {
+func New(ctx context.Context, metricAPI MetricAPI, logger netmon.Logger, cfg Config) (*Monitor, error) {
 	user, err := speedtest.FetchUserInfoContext(ctx)
 	if err != nil {
 		return nil, err
@@ -40,10 +41,10 @@ func NewSpeedMonitor(ctx context.Context, metricAPI SpeedMetricAPI, logger Logge
 	if err != nil {
 		return nil, err
 	}
-	return &SpeedMonitor{metricAPI: metricAPI, logger: logger, cfg: cfg, targets: targets}, nil
+	return &Monitor{metricAPI: metricAPI, logger: logger, cfg: cfg, targets: targets}, nil
 }
 
-func (sm *SpeedMonitor) Monitor(ctx context.Context) {
+func (sm *Monitor) Monitor(ctx context.Context) {
 	tc := time.NewTicker(sm.cfg.Interval)
 
 	for {
@@ -53,9 +54,8 @@ func (sm *SpeedMonitor) Monitor(ctx context.Context) {
 		case <-tc.C:
 			tc.Stop()
 			wg := sync.WaitGroup{}
-
+			wg.Add(len(sm.targets))
 			for _, target := range sm.targets {
-				wg.Add(1)
 				go func(target *speedtest.Server) {
 					sm.measure(ctx, target)
 					wg.Done()
@@ -67,7 +67,7 @@ func (sm *SpeedMonitor) Monitor(ctx context.Context) {
 	}
 }
 
-func (sm *SpeedMonitor) measure(ctx context.Context, srv *speedtest.Server) {
+func (sm *Monitor) measure(ctx context.Context, srv *speedtest.Server) {
 	serverName := fmt.Sprintf("%s - %s", srv.ID, srv.Sponsor)
 	srv.PingTestContext(ctx)
 	srv.DownloadTestContext(ctx, false)
