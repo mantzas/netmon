@@ -10,6 +10,7 @@ import (
 	"github.com/showwin/speedtest-go/speedtest"
 )
 
+// Config definition.
 type Config struct {
 	ServerIDs []int
 	Interval  time.Duration
