@@ -1,3 +1,4 @@
+// Package speed provides facilities to speedtest and report the results.
 package speed
 
 import (

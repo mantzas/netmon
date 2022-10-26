@@ -35,12 +35,12 @@ func main() {
 	chSignal := make(chan os.Signal, 1)
 	signal.Notify(chSignal, os.Interrupt, syscall.SIGTERM)
 
-	pm, err := ping.New(client, logger, cfg.ping)
+	pingMonitor, err := ping.New(client, logger, cfg.ping)
 	if err != nil {
 		logger.Fatalln(err)
 	}
 
-	sm, err := speed.New(ctx, client, logger, cfg.speed)
+	speedMonitor, err := speed.New(ctx, client, logger, cfg.speed)
 	if err != nil {
 		logger.Fatalln(err)
 	}
@@ -50,14 +50,14 @@ func main() {
 	wg.Add(1)
 
 	go func() {
-		pm.Monitor(ctx)
+		pingMonitor.Monitor(ctx)
 		wg.Done()
 	}()
 
 	wg.Add(1)
 
 	go func() {
-		sm.Monitor(ctx)
+		speedMonitor.Monitor(ctx)
 		wg.Done()
 	}()
 
@@ -81,6 +81,7 @@ type config struct {
 
 func configFromEnv() (config, error) {
 	var err error
+
 	cfg := config{}
 
 	cfg.influxdb, err = getInfluxDBConfig()
@@ -105,6 +106,7 @@ func getInfluxDBConfig() (netmon.InfluxDBConfig, error) {
 	var err error
 	cfg := netmon.InfluxDBConfig{}
 	cfg.URL, err = getEnv("INFLUXDB_URL")
+
 	if err != nil {
 		return netmon.InfluxDBConfig{}, err
 	}
@@ -163,7 +165,6 @@ func getSpeedConfig() (speed.Config, error) {
 	}
 
 	for _, id := range strings.Split(ids, ",") {
-
 		serverID, err := strconv.Atoi(id)
 		if err != nil {
 			return speed.Config{}, fmt.Errorf("failed to convert server id [%s]: %v", id, err)

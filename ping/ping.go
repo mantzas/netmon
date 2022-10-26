@@ -1,3 +1,4 @@
+// Package ping provides facilities to measure ping and report the results.
 package ping
 
 import (
@@ -59,7 +60,7 @@ func (pm *Monitor) measure(ctx context.Context, address string) {
 	}
 
 	p.Count = 3
-	p.Timeout =  20 * time.Second
+	p.Timeout = 20 * time.Second
 	err = p.Run()
 	if err != nil {
 		pm.logger.Printf("ping: failed to run pinger: %v\n", err)
