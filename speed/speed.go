@@ -17,10 +17,12 @@ type Config struct {
 	Interval  time.Duration
 }
 
+// MetricAPI definition.
 type MetricAPI interface {
 	ReportSpeed(context.Context, *speedtest.Server) error
 }
 
+// Monitor definition.
 type Monitor struct {
 	metricAPI MetricAPI
 	logger    netmon.Logger
@@ -28,6 +30,7 @@ type Monitor struct {
 	targets   speedtest.Servers
 }
 
+// New constructs a new speedtest monitor.
 func New(ctx context.Context, metricAPI MetricAPI, logger netmon.Logger, cfg Config) (*Monitor, error) {
 	user, err := speedtest.FetchUserInfoContext(ctx)
 	if err != nil {
@@ -46,6 +49,7 @@ func New(ctx context.Context, metricAPI MetricAPI, logger netmon.Logger, cfg Con
 	return &Monitor{metricAPI: metricAPI, logger: logger, cfg: cfg, targets: targets}, nil
 }
 
+// Monitor starts the measurement.
 func (sm *Monitor) Monitor(ctx context.Context) {
 	tc := time.NewTicker(sm.cfg.Interval)
 

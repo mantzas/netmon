@@ -12,6 +12,7 @@ import (
 	"github.com/showwin/speedtest-go/speedtest"
 )
 
+// InfluxDBConfig definition.
 type InfluxDBConfig struct {
 	URL    string
 	Token  string
@@ -19,11 +20,13 @@ type InfluxDBConfig struct {
 	Bucket string
 }
 
+// MetricClient definition.
 type MetricClient struct {
 	client   influxdb2.Client
 	writeAPI api.WriteAPIBlocking
 }
 
+// NewMetricClient constructor.
 func NewMetricClient(ctx context.Context, cfg InfluxDBConfig) (*MetricClient, error) {
 	client := influxdb2.NewClient(cfg.URL, cfg.Token)
 
@@ -38,6 +41,7 @@ func NewMetricClient(ctx context.Context, cfg InfluxDBConfig) (*MetricClient, er
 	return &MetricClient{client: client, writeAPI: client.WriteAPIBlocking(cfg.Org, cfg.Bucket)}, nil
 }
 
+// ReportPing takes the result of a ping operation and writes a measurement.
 func (mc *MetricClient) ReportPing(ctx context.Context, stats *ping.Statistics) error {
 	p := influxdb2.NewPoint(
 		"ping",
@@ -60,6 +64,7 @@ func (mc *MetricClient) ReportPing(ctx context.Context, stats *ping.Statistics) 
 	return nil
 }
 
+// ReportSpeed takes the result of a speedtest operation and writes a measurement.
 func (mc *MetricClient) ReportSpeed(ctx context.Context, srv *speedtest.Server) error {
 	p := influxdb2.NewPoint(
 		"speedtest",
@@ -81,6 +86,7 @@ func (mc *MetricClient) ReportSpeed(ctx context.Context, srv *speedtest.Server) 
 	return nil
 }
 
+// Close the underlying client.
 func (mc *MetricClient) Close() {
 	mc.client.Close()
 }
