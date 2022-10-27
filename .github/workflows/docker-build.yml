@@ -27,7 +27,7 @@ jobs:
       - name: Log in to the Container registry
         uses: docker/login-action@v2
         with:
-          username: mantzas
+          username: ${{ secrets.DOCKETHUB_USERNAME }}
           password: ${{ secrets.DOCKETHUB_ACCESSTOKEN }}
 
       - name: Build and push
