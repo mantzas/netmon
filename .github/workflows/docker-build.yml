@@ -4,8 +4,8 @@ on:
     types: [published]
 
 env:
+  REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
-  REGISTRY: "mantzas"
 
 jobs:
   publish:
@@ -28,8 +28,9 @@ jobs:
       - name: Log in to the Container registry
         uses: docker/login-action@v2
         with:
-          username: ${{ secrets.DOCKETHUB_USERNAME }}
-          password: ${{ secrets.DOCKETHUB_ACCESSTOKEN }}
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push
         uses: docker/build-push-action@v3
@@ -38,3 +39,4 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest,${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.RELEASE_VERSION }}"
+          build-args: GH_TOKEN=${{ secrets.MANTZAS_GH_TOKEN }}
