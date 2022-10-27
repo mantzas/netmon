@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mantzas/netmon"
+	"github.com/mantzas/netmon/log"
 	"github.com/showwin/speedtest-go/speedtest"
 )
 
@@ -25,13 +25,13 @@ type MetricAPI interface {
 // Monitor definition.
 type Monitor struct {
 	metricAPI MetricAPI
-	logger    netmon.Logger
+	logger    log.Logger
 	cfg       Config
 	targets   speedtest.Servers
 }
 
 // New constructs a new speedtest monitor.
-func New(ctx context.Context, metricAPI MetricAPI, logger netmon.Logger, cfg Config) (*Monitor, error) {
+func New(ctx context.Context, metricAPI MetricAPI, logger log.Logger, cfg Config) (*Monitor, error) {
 	user, err := speedtest.FetchUserInfoContext(ctx)
 	if err != nil {
 		return nil, err

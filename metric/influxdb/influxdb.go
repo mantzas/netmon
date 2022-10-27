@@ -1,4 +1,4 @@
-package netmon
+package influxdb
 
 import (
 	"context"
@@ -12,22 +12,22 @@ import (
 	"github.com/showwin/speedtest-go/speedtest"
 )
 
-// InfluxDBConfig definition.
-type InfluxDBConfig struct {
+// Config definition.
+type Config struct {
 	URL    string
 	Token  string
 	Org    string
 	Bucket string
 }
 
-// MetricClient definition.
-type MetricClient struct {
+// Metric definition.
+type Metric struct {
 	client   influxdb2.Client
 	writeAPI api.WriteAPIBlocking
 }
 
-// NewMetricClient constructor.
-func NewMetricClient(ctx context.Context, cfg InfluxDBConfig) (*MetricClient, error) {
+// New constructor.
+func New(ctx context.Context, cfg Config) (*Metric, error) {
 	client := influxdb2.NewClient(cfg.URL, cfg.Token)
 
 	ok, err := client.Ping(ctx)
@@ -38,11 +38,11 @@ func NewMetricClient(ctx context.Context, cfg InfluxDBConfig) (*MetricClient, er
 		return nil, errors.New("failed to ping metric server")
 	}
 
-	return &MetricClient{client: client, writeAPI: client.WriteAPIBlocking(cfg.Org, cfg.Bucket)}, nil
+	return &Metric{client: client, writeAPI: client.WriteAPIBlocking(cfg.Org, cfg.Bucket)}, nil
 }
 
 // ReportPing takes the result of a ping operation and writes a measurement.
-func (mc *MetricClient) ReportPing(ctx context.Context, stats *ping.Statistics) error {
+func (mc *Metric) ReportPing(ctx context.Context, stats *ping.Statistics) error {
 	p := influxdb2.NewPoint(
 		"ping",
 		map[string]string{
@@ -65,7 +65,7 @@ func (mc *MetricClient) ReportPing(ctx context.Context, stats *ping.Statistics) 
 }
 
 // ReportSpeed takes the result of a speedtest operation and writes a measurement.
-func (mc *MetricClient) ReportSpeed(ctx context.Context, srv *speedtest.Server) error {
+func (mc *Metric) ReportSpeed(ctx context.Context, srv *speedtest.Server) error {
 	p := influxdb2.NewPoint(
 		"speedtest",
 		map[string]string{
@@ -87,6 +87,6 @@ func (mc *MetricClient) ReportSpeed(ctx context.Context, srv *speedtest.Server) 
 }
 
 // Close the underlying client.
-func (mc *MetricClient) Close() {
+func (mc *Metric) Close() {
 	mc.client.Close()
 }

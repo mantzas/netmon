@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/go-ping/ping"
-	"github.com/mantzas/netmon"
+	"github.com/mantzas/netmon/log"
 )
 
 // Config definition.
@@ -23,13 +23,13 @@ type MetricAPI interface {
 
 // Monitor definition.
 type Monitor struct {
-	logger    netmon.Logger
+	logger    log.Logger
 	cfg       Config
 	metricAPI MetricAPI
 }
 
 // New constructs a new ping monitor.
-func New(metricAPI MetricAPI, logger netmon.Logger, cfg Config) (*Monitor, error) {
+func New(metricAPI MetricAPI, logger log.Logger, cfg Config) (*Monitor, error) {
 	return &Monitor{metricAPI: metricAPI, logger: logger, cfg: cfg}, nil
 }
 

@@ -11,13 +11,14 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/mantzas/netmon"
+	"github.com/mantzas/netmon/log"
+	"github.com/mantzas/netmon/metric/influxdb"
 	"github.com/mantzas/netmon/ping"
 	"github.com/mantzas/netmon/speed"
 )
 
 func main() {
-	logger := &netmon.Log{}
+	logger := &log.Log{}
 
 	cfg, err := configFromEnv()
 	if err != nil {
@@ -26,7 +27,7 @@ func main() {
 
 	ctx, cnl := context.WithCancel(context.Background())
 
-	client, err := netmon.NewMetricClient(ctx, cfg.influxdb)
+	client, err := influxdb.New(ctx, cfg.influxdb)
 	if err != nil {
 		logger.Fatalln(err)
 	}
@@ -74,7 +75,7 @@ func main() {
 }
 
 type config struct {
-	influxdb netmon.InfluxDBConfig
+	influxdb influxdb.Config
 	ping     ping.Config
 	speed    speed.Config
 }
@@ -102,28 +103,28 @@ func configFromEnv() (config, error) {
 	return cfg, nil
 }
 
-func getInfluxDBConfig() (netmon.InfluxDBConfig, error) {
+func getInfluxDBConfig() (influxdb.Config, error) {
 	var err error
-	cfg := netmon.InfluxDBConfig{}
+	cfg := influxdb.Config{}
 	cfg.URL, err = getEnv("INFLUXDB_URL")
 
 	if err != nil {
-		return netmon.InfluxDBConfig{}, err
+		return influxdb.Config{}, err
 	}
 
 	cfg.Token, err = getEnv("INFLUXDB_TOKEN")
 	if err != nil {
-		return netmon.InfluxDBConfig{}, err
+		return influxdb.Config{}, err
 	}
 
 	cfg.Org, err = getEnv("INFLUXDB_ORG")
 	if err != nil {
-		return netmon.InfluxDBConfig{}, err
+		return influxdb.Config{}, err
 	}
 
 	cfg.Bucket, err = getEnv("INFLUXDB_BUCKET")
 	if err != nil {
-		return netmon.InfluxDBConfig{}, err
+		return influxdb.Config{}, err
 	}
 
 	return cfg, nil

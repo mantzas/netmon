@@ -1,4 +1,5 @@
-package netmon
+// Package log contains a goroutine safe implementation.
+package log
 
 import (
 	"log"
