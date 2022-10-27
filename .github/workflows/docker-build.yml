@@ -5,6 +5,7 @@ on:
 
 env:
   IMAGE_NAME: ${{ github.repository }}
+  REGISTRY: "mantzas"
 
 jobs:
   publish:
@@ -37,4 +38,3 @@ jobs:
           platforms: linux/amd64
           push: true
           tags: "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest,${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.RELEASE_VERSION }}"
-          # build-args: GH_TOKEN=${{ secrets.MATCHING_BAKE }}
