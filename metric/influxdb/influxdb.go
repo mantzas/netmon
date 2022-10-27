@@ -1,3 +1,4 @@
+// Package influxdb is responsible for reporting our measurements to InfluxDB.
 package influxdb
 
 import (

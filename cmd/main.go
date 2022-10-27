@@ -20,16 +20,24 @@ import (
 func main() {
 	logger := &log.Log{}
 
-	cfg, err := configFromEnv()
+	err := run(logger)
 	if err != nil {
 		logger.Fatalln(err)
 	}
+}
+
+func run(logger log.Logger) error {
+	cfg, err := configFromEnv()
+	if err != nil {
+		return err
+	}
 
 	ctx, cnl := context.WithCancel(context.Background())
+	defer cnl()
 
 	client, err := influxdb.New(ctx, cfg.influxdb)
 	if err != nil {
-		logger.Fatalln(err)
+		return err
 	}
 	defer client.Close()
 
@@ -38,12 +46,12 @@ func main() {
 
 	pingMonitor, err := ping.New(client, logger, cfg.ping)
 	if err != nil {
-		logger.Fatalln(err)
+		return err
 	}
 
 	speedMonitor, err := speed.New(ctx, client, logger, cfg.speed)
 	if err != nil {
-		logger.Fatalln(err)
+		return err
 	}
 
 	wg := sync.WaitGroup{}
@@ -69,7 +77,7 @@ func main() {
 			cnl()
 		case <-ctx.Done():
 			wg.Wait()
-			os.Exit(0)
+			return nil
 		}
 	}
 }
