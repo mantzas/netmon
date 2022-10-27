@@ -1,3 +1,4 @@
+// Package speed provides facilities to speedtest and report the results.
 package speed
 
 import (
@@ -6,27 +7,31 @@ import (
 	"sync"
 	"time"
 
-	"github.com/mantzas/netmon"
+	"github.com/mantzas/netmon/log"
 	"github.com/showwin/speedtest-go/speedtest"
 )
 
+// Config definition.
 type Config struct {
 	ServerIDs []int
 	Interval  time.Duration
 }
 
+// MetricAPI definition.
 type MetricAPI interface {
 	ReportSpeed(context.Context, *speedtest.Server) error
 }
 
+// Monitor definition.
 type Monitor struct {
 	metricAPI MetricAPI
-	logger    netmon.Logger
+	logger    log.Logger
 	cfg       Config
 	targets   speedtest.Servers
 }
 
-func New(ctx context.Context, metricAPI MetricAPI, logger netmon.Logger, cfg Config) (*Monitor, error) {
+// New constructs a new speedtest monitor.
+func New(ctx context.Context, metricAPI MetricAPI, logger log.Logger, cfg Config) (*Monitor, error) {
 	user, err := speedtest.FetchUserInfoContext(ctx)
 	if err != nil {
 		return nil, err
@@ -44,6 +49,7 @@ func New(ctx context.Context, metricAPI MetricAPI, logger netmon.Logger, cfg Con
 	return &Monitor{metricAPI: metricAPI, logger: logger, cfg: cfg, targets: targets}, nil
 }
 
+// Monitor starts the measurement.
 func (sm *Monitor) Monitor(ctx context.Context) {
 	tc := time.NewTicker(sm.cfg.Interval)
 

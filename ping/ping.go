@@ -1,3 +1,4 @@
+// Package ping provides facilities to measure ping and report the results.
 package ping
 
 import (
@@ -6,28 +7,33 @@ import (
 	"time"
 
 	"github.com/go-ping/ping"
-	"github.com/mantzas/netmon"
+	"github.com/mantzas/netmon/log"
 )
 
+// Config definition.
 type Config struct {
 	Addresses []string
 	Interval  time.Duration
 }
 
+// MetricAPI definition.
 type MetricAPI interface {
 	ReportPing(context.Context, *ping.Statistics) error
 }
 
+// Monitor definition.
 type Monitor struct {
-	logger    netmon.Logger
+	logger    log.Logger
 	cfg       Config
 	metricAPI MetricAPI
 }
 
-func New(metricAPI MetricAPI, logger netmon.Logger, cfg Config) (*Monitor, error) {
+// New constructs a new ping monitor.
+func New(metricAPI MetricAPI, logger log.Logger, cfg Config) (*Monitor, error) {
 	return &Monitor{metricAPI: metricAPI, logger: logger, cfg: cfg}, nil
 }
 
+// Monitor starts the measurement.
 func (pm *Monitor) Monitor(ctx context.Context) {
 	tc := time.NewTicker(pm.cfg.Interval)
 
@@ -59,7 +65,7 @@ func (pm *Monitor) measure(ctx context.Context, address string) {
 	}
 
 	p.Count = 3
-	p.Timeout =  20 * time.Second
+	p.Timeout = 20 * time.Second
 	err = p.Run()
 	if err != nil {
 		pm.logger.Printf("ping: failed to run pinger: %v\n", err)

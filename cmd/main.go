@@ -11,38 +11,47 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/mantzas/netmon"
+	"github.com/mantzas/netmon/log"
+	"github.com/mantzas/netmon/metric/influxdb"
 	"github.com/mantzas/netmon/ping"
 	"github.com/mantzas/netmon/speed"
 )
 
 func main() {
-	logger := &netmon.Log{}
+	logger := &log.Log{}
 
-	cfg, err := configFromEnv()
+	err := run(logger)
 	if err != nil {
 		logger.Fatalln(err)
 	}
+}
+
+func run(logger log.Logger) error {
+	cfg, err := configFromEnv()
+	if err != nil {
+		return err
+	}
 
 	ctx, cnl := context.WithCancel(context.Background())
+	defer cnl()
 
-	client, err := netmon.NewMetricClient(ctx, cfg.influxdb)
+	client, err := influxdb.New(ctx, cfg.influxdb)
 	if err != nil {
-		logger.Fatalln(err)
+		return err
 	}
 	defer client.Close()
 
 	chSignal := make(chan os.Signal, 1)
 	signal.Notify(chSignal, os.Interrupt, syscall.SIGTERM)
 
-	pm, err := ping.New(client, logger, cfg.ping)
+	pingMonitor, err := ping.New(client, logger, cfg.ping)
 	if err != nil {
-		logger.Fatalln(err)
+		return err
 	}
 
-	sm, err := speed.New(ctx, client, logger, cfg.speed)
+	speedMonitor, err := speed.New(ctx, client, logger, cfg.speed)
 	if err != nil {
-		logger.Fatalln(err)
+		return err
 	}
 
 	wg := sync.WaitGroup{}
@@ -50,14 +59,14 @@ func main() {
 	wg.Add(1)
 
 	go func() {
-		pm.Monitor(ctx)
+		pingMonitor.Monitor(ctx)
 		wg.Done()
 	}()
 
 	wg.Add(1)
 
 	go func() {
-		sm.Monitor(ctx)
+		speedMonitor.Monitor(ctx)
 		wg.Done()
 	}()
 
@@ -68,19 +77,20 @@ func main() {
 			cnl()
 		case <-ctx.Done():
 			wg.Wait()
-			os.Exit(0)
+			return nil
 		}
 	}
 }
 
 type config struct {
-	influxdb netmon.InfluxDBConfig
+	influxdb influxdb.Config
 	ping     ping.Config
 	speed    speed.Config
 }
 
 func configFromEnv() (config, error) {
 	var err error
+
 	cfg := config{}
 
 	cfg.influxdb, err = getInfluxDBConfig()
@@ -101,27 +111,28 @@ func configFromEnv() (config, error) {
 	return cfg, nil
 }
 
-func getInfluxDBConfig() (netmon.InfluxDBConfig, error) {
+func getInfluxDBConfig() (influxdb.Config, error) {
 	var err error
-	cfg := netmon.InfluxDBConfig{}
+	cfg := influxdb.Config{}
 	cfg.URL, err = getEnv("INFLUXDB_URL")
+
 	if err != nil {
-		return netmon.InfluxDBConfig{}, err
+		return influxdb.Config{}, err
 	}
 
 	cfg.Token, err = getEnv("INFLUXDB_TOKEN")
 	if err != nil {
-		return netmon.InfluxDBConfig{}, err
+		return influxdb.Config{}, err
 	}
 
 	cfg.Org, err = getEnv("INFLUXDB_ORG")
 	if err != nil {
-		return netmon.InfluxDBConfig{}, err
+		return influxdb.Config{}, err
 	}
 
 	cfg.Bucket, err = getEnv("INFLUXDB_BUCKET")
 	if err != nil {
-		return netmon.InfluxDBConfig{}, err
+		return influxdb.Config{}, err
 	}
 
 	return cfg, nil
@@ -163,7 +174,6 @@ func getSpeedConfig() (speed.Config, error) {
 	}
 
 	for _, id := range strings.Split(ids, ",") {
-
 		serverID, err := strconv.Atoi(id)
 		if err != nil {
 			return speed.Config{}, fmt.Errorf("failed to convert server id [%s]: %v", id, err)
