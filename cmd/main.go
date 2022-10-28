@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -39,21 +40,26 @@ func run() error {
 	chSignal := make(chan os.Signal, 1)
 	signal.Notify(chSignal, os.Interrupt, syscall.SIGTERM)
 
-	scheduler, err := netmon.NewScheduler(cfg.ping, cfg.speed, ping.Ping, speed.Test)
-	if err != nil {
-		return err
-	}
-
 	srv := createHTTPServer(cfg.httpPort)
 
+	wg := sync.WaitGroup{}
+
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		err = srv.ListenAndServe()
 		if err != nil {
 			log.Printf("failed to run HTTP listener: %v", err)
 		}
 	}()
 
+	scheduler, err := netmon.NewScheduler(cfg.ping, cfg.speed, ping.Ping, speed.Test)
+	if err != nil {
+		return err
+	}
+
 	go func() {
+		defer wg.Done()
 		scheduler.Schedule(ctx)
 	}()
 
@@ -67,6 +73,7 @@ func run() error {
 			}
 			cnl()
 		case <-ctx.Done():
+			wg.Wait()
 			return nil
 		}
 	}
@@ -95,7 +102,7 @@ type config struct {
 func configFromEnv() (config, error) {
 	cfg := config{}
 
-	httpPort, err := getEnv("HTTP_PORT", "50001")
+	httpPort, err := getEnv("HTTP_PORT", "8092")
 	if err != nil {
 		return cfg, err
 	}
