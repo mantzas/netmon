@@ -2,12 +2,11 @@
 package ping
 
 import (
-	"context"
-	"sync"
+	"fmt"
+	"log"
 	"time"
 
 	"github.com/go-ping/ping"
-	"github.com/mantzas/netmon/log"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -25,64 +24,23 @@ func init() {
 	prometheus.MustRegister(pingGauge)
 }
 
-// Config definition.
-type Config struct {
-	Addresses []string
-	Interval  time.Duration
-}
-
-// Monitor definition.
-type Monitor struct {
-	logger log.Logger
-	cfg    Config
-}
-
-// New constructs a new ping monitor.
-func New(logger log.Logger, cfg Config) (*Monitor, error) {
-	return &Monitor{logger: logger, cfg: cfg}, nil
-}
-
-// Monitor starts the measurement.
-func (pm *Monitor) Monitor(ctx context.Context) {
-	tc := time.NewTicker(pm.cfg.Interval)
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-tc.C:
-			tc.Stop()
-			wg := sync.WaitGroup{}
-			wg.Add(len(pm.cfg.Addresses))
-			for _, address := range pm.cfg.Addresses {
-				go func(addr string) {
-					pm.measure(ctx, addr)
-					wg.Done()
-				}(address)
-			}
-			wg.Wait()
-			tc.Reset(pm.cfg.Interval)
-		}
-	}
-}
-
-func (pm *Monitor) measure(ctx context.Context, address string) {
+// Ping the provided address and report metrics.
+func Ping(address string) error {
 	p, err := ping.NewPinger(address)
 	if err != nil {
-		pm.logger.Printf("ping: failed to create pinger: %v\n", err)
-		return
+		return fmt.Errorf("ping: failed to create pinger: %w", err)
 	}
 
 	p.Count = 3
 	p.Timeout = 20 * time.Second
 	err = p.Run()
 	if err != nil {
-		pm.logger.Printf("ping: failed to run pinger: %v\n", err)
-		return
+		return fmt.Errorf("ping: failed to run pinger: %w", err)
 	}
 
 	stats := p.Statistics()
 
-	pm.logger.Printf("ping for %s: %dms\n", address, stats.AvgRtt.Milliseconds())
+	log.Printf("ping for %s: %dms\n", address, stats.AvgRtt.Milliseconds())
 	pingGauge.WithLabelValues(address).Set(stats.AvgRtt.Seconds())
+	return nil
 }

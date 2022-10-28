@@ -4,10 +4,8 @@ package speed
 import (
 	"context"
 	"fmt"
-	"sync"
-	"time"
+	"log"
 
-	"github.com/mantzas/netmon/log"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/showwin/speedtest-go/speedtest"
 )
@@ -37,87 +35,47 @@ func init() {
 	prometheus.MustRegister(speedGauge)
 }
 
-// Config definition.
-type Config struct {
-	ServerIDs []int
-	Interval  time.Duration
-}
-
-// Monitor definition.
-type Monitor struct {
-	logger  log.Logger
-	cfg     Config
-	targets speedtest.Servers
-}
-
-// New constructs a new speedtest monitor.
-func New(ctx context.Context, logger log.Logger, cfg Config) (*Monitor, error) {
+// Test runs a speed test for the predefined server ids and report metrics.
+func Test(ctx context.Context, serverIDs []int) error {
 	user, err := speedtest.FetchUserInfoContext(ctx)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	serverList, err := speedtest.FetchServerListContext(ctx, user)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	targets, err := serverList.FindServer(cfg.ServerIDs)
+	targets, err := serverList.FindServer(serverIDs)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return &Monitor{logger: logger, cfg: cfg, targets: targets}, nil
-}
 
-// Monitor starts the measurement.
-func (sm *Monitor) Monitor(ctx context.Context) {
-	tc := time.NewTicker(sm.cfg.Interval)
+	for _, target := range targets {
+		serverName := fmt.Sprintf("%s - %s", target.ID, target.Sponsor)
 
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-tc.C:
-			tc.Stop()
-			wg := sync.WaitGroup{}
-			wg.Add(len(sm.targets))
-			for _, target := range sm.targets {
-				go func(target *speedtest.Server) {
-					sm.measure(ctx, target)
-					wg.Done()
-				}(target)
-			}
-			wg.Wait()
-			tc.Reset(sm.cfg.Interval)
+		err := target.PingTestContext(ctx)
+		if err != nil {
+			return fmt.Errorf("speedtest: failed pint test: %w", err)
 		}
+		latencyGauge.WithLabelValues(serverName).Set(target.Latency.Seconds())
+
+		err = target.DownloadTestContext(ctx, false)
+		if err != nil {
+			return fmt.Errorf("speedtest: failed download test: %w", err)
+		}
+
+		speedGauge.WithLabelValues(serverName, "dl").Set(target.DLSpeed)
+
+		err = target.UploadTestContext(ctx, false)
+		if err != nil {
+			return fmt.Errorf("speedtest: failed upload test: %v", err)
+		}
+
+		speedGauge.WithLabelValues(serverName, "ul").Set(target.ULSpeed)
+
+		log.Printf("speedtest for host: %s, latency: %s, dl: %f, ul: %f\n", serverName, target.Latency, target.DLSpeed, target.ULSpeed)
 	}
-}
-
-func (sm *Monitor) measure(ctx context.Context, srv *speedtest.Server) {
-	serverName := fmt.Sprintf("%s - %s", srv.ID, srv.Sponsor)
-
-	err := srv.PingTestContext(ctx)
-	if err != nil {
-		sm.logger.Printf("speedtest: failed pint test: %v\n", err)
-		return
-	}
-	latencyGauge.WithLabelValues(serverName).Set(srv.Latency.Seconds())
-
-	err = srv.DownloadTestContext(ctx, false)
-	if err != nil {
-		sm.logger.Printf("speedtest: failed download test: %v\n", err)
-		return
-	}
-
-	speedGauge.WithLabelValues(serverName, "dl").Set(srv.DLSpeed)
-
-	err = srv.UploadTestContext(ctx, false)
-	if err != nil {
-		sm.logger.Printf("speedtest: failed upload test: %v\n", err)
-		return
-	}
-
-	speedGauge.WithLabelValues(serverName, "ul").Set(srv.ULSpeed)
-
-	sm.logger.Printf("speedtest for host: %s, latency: %s, dl: %f, ul: %f\n", serverName, srv.Latency, srv.DLSpeed, srv.ULSpeed)
+	return nil
 }
