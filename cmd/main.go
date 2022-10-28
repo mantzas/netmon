@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -12,28 +13,25 @@ import (
 	"time"
 
 	"github.com/mantzas/netmon"
-	"github.com/mantzas/netmon/log"
 	"github.com/mantzas/netmon/ping"
 	"github.com/mantzas/netmon/speed"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func main() {
-	logger := &log.Log{}
-
-	err := run(logger)
+	err := run()
 	if err != nil {
-		logger.Fatalln(err)
+		log.Fatalln(err)
 	}
 }
 
-func run(logger log.Logger) error {
+func run() error {
 	cfg, err := configFromEnv()
 	if err != nil {
 		return err
 	}
 
-	logger.Printf("starting monitoring: %+v", cfg)
+	log.Printf("starting monitoring: %+v", cfg)
 
 	ctx, cnl := context.WithCancel(context.Background())
 	defer cnl()
@@ -51,7 +49,7 @@ func run(logger log.Logger) error {
 	go func() {
 		err = srv.ListenAndServe()
 		if err != nil {
-			logger.Printf("failed to run HTTP listener: %v", err)
+			log.Printf("failed to run HTTP listener: %v", err)
 		}
 	}()
 
@@ -62,7 +60,7 @@ func run(logger log.Logger) error {
 	for {
 		select {
 		case sig := <-chSignal:
-			logger.Printf("signal %v received\n", sig)
+			log.Printf("signal %v received\n", sig)
 			err = srv.Close()
 			if err != nil {
 				return fmt.Errorf("failed to close HTTP server: %v", err)
