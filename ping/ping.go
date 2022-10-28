@@ -8,7 +8,22 @@ import (
 
 	"github.com/go-ping/ping"
 	"github.com/mantzas/netmon/log"
+	"github.com/prometheus/client_golang/prometheus"
 )
+
+var pingGauge = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Namespace: "netmon",
+		Subsystem: "ping",
+		Name:      "avg_rtt_seconds",
+		Help:      "Average RTT in seconds",
+	},
+	[]string{"address"},
+)
+
+func init() {
+	prometheus.MustRegister(pingGauge)
+}
 
 // Config definition.
 type Config struct {
@@ -16,21 +31,15 @@ type Config struct {
 	Interval  time.Duration
 }
 
-// MetricAPI definition.
-type MetricAPI interface {
-	ReportPing(context.Context, *ping.Statistics) error
-}
-
 // Monitor definition.
 type Monitor struct {
-	logger    log.Logger
-	cfg       Config
-	metricAPI MetricAPI
+	logger log.Logger
+	cfg    Config
 }
 
 // New constructs a new ping monitor.
-func New(metricAPI MetricAPI, logger log.Logger, cfg Config) (*Monitor, error) {
-	return &Monitor{metricAPI: metricAPI, logger: logger, cfg: cfg}, nil
+func New(logger log.Logger, cfg Config) (*Monitor, error) {
+	return &Monitor{logger: logger, cfg: cfg}, nil
 }
 
 // Monitor starts the measurement.
@@ -75,10 +84,5 @@ func (pm *Monitor) measure(ctx context.Context, address string) {
 	stats := p.Statistics()
 
 	pm.logger.Printf("ping for %s: %dms\n", address, stats.AvgRtt.Milliseconds())
-
-	err = pm.metricAPI.ReportPing(ctx, stats)
-	if err != nil {
-		pm.logger.Printf("ping: failed report metrics: %v\n", err)
-		return
-	}
+	pingGauge.WithLabelValues(address).Set(stats.AvgRtt.Seconds())
 }

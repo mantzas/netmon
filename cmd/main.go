@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"strconv"
@@ -12,9 +13,9 @@ import (
 	"time"
 
 	"github.com/mantzas/netmon/log"
-	"github.com/mantzas/netmon/metric/influxdb"
 	"github.com/mantzas/netmon/ping"
 	"github.com/mantzas/netmon/speed"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 func main() {
@@ -35,21 +36,15 @@ func run(logger log.Logger) error {
 	ctx, cnl := context.WithCancel(context.Background())
 	defer cnl()
 
-	client, err := influxdb.New(ctx, cfg.influxdb)
-	if err != nil {
-		return err
-	}
-	defer client.Close()
-
 	chSignal := make(chan os.Signal, 1)
 	signal.Notify(chSignal, os.Interrupt, syscall.SIGTERM)
 
-	pingMonitor, err := ping.New(client, logger, cfg.ping)
+	pingMonitor, err := ping.New(logger, cfg.ping)
 	if err != nil {
 		return err
 	}
 
-	speedMonitor, err := speed.New(ctx, client, logger, cfg.speed)
+	speedMonitor, err := speed.New(ctx, logger, cfg.speed)
 	if err != nil {
 		return err
 	}
@@ -70,10 +65,23 @@ func run(logger log.Logger) error {
 		wg.Done()
 	}()
 
+	srv := createHTTPServer(cfg.httpPort)
+
+	go func() {
+		err = srv.ListenAndServe()
+		if err != nil {
+			logger.Printf("failed to run HTTP listener: %v", err)
+		}
+	}()
+
 	for {
 		select {
 		case sig := <-chSignal:
 			logger.Printf("signal %v received\n", sig)
+			err = srv.Close()
+			if err != nil {
+				return fmt.Errorf("failed to close HTTP server: %v", err)
+			}
 			cnl()
 		case <-ctx.Done():
 			wg.Wait()
@@ -82,20 +90,33 @@ func run(logger log.Logger) error {
 	}
 }
 
+func createHTTPServer(port int) *http.Server {
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", promhttp.Handler())
+
+	return &http.Server{
+		Addr:    fmt.Sprintf(":%d", port),
+		Handler: mux,
+	}
+}
+
 type config struct {
-	influxdb influxdb.Config
+	httpPort int
 	ping     ping.Config
 	speed    speed.Config
 }
 
 func configFromEnv() (config, error) {
-	var err error
-
 	cfg := config{}
 
-	cfg.influxdb, err = getInfluxDBConfig()
+	httpPort, err := getEnv("HTTP_PORT")
 	if err != nil {
-		return config{}, err
+		return cfg, err
+	}
+
+	cfg.httpPort, err = strconv.Atoi(httpPort)
+	if err != nil {
+		return cfg, err
 	}
 
 	cfg.ping, err = getPingConfig()
@@ -106,33 +127,6 @@ func configFromEnv() (config, error) {
 	cfg.speed, err = getSpeedConfig()
 	if err != nil {
 		return config{}, err
-	}
-
-	return cfg, nil
-}
-
-func getInfluxDBConfig() (influxdb.Config, error) {
-	var err error
-	cfg := influxdb.Config{}
-	cfg.URL, err = getEnv("INFLUXDB_URL")
-
-	if err != nil {
-		return influxdb.Config{}, err
-	}
-
-	cfg.Token, err = getEnv("INFLUXDB_TOKEN")
-	if err != nil {
-		return influxdb.Config{}, err
-	}
-
-	cfg.Org, err = getEnv("INFLUXDB_ORG")
-	if err != nil {
-		return influxdb.Config{}, err
-	}
-
-	cfg.Bucket, err = getEnv("INFLUXDB_BUCKET")
-	if err != nil {
-		return influxdb.Config{}, err
 	}
 
 	return cfg, nil

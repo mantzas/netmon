@@ -8,8 +8,34 @@ import (
 	"time"
 
 	"github.com/mantzas/netmon/log"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/showwin/speedtest-go/speedtest"
 )
+
+var latencyGauge = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Namespace: "netmon",
+		Subsystem: "speettest",
+		Name:      "latency_seconds",
+		Help:      "Latency in seconds",
+	},
+	[]string{"server"},
+)
+
+var speedGauge = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Namespace: "netmon",
+		Subsystem: "speettest",
+		Name:      "speed",
+		Help:      "Up and download speed",
+	},
+	[]string{"server", "direction"},
+)
+
+func init() {
+	prometheus.MustRegister(latencyGauge)
+	prometheus.MustRegister(speedGauge)
+}
 
 // Config definition.
 type Config struct {
@@ -17,21 +43,15 @@ type Config struct {
 	Interval  time.Duration
 }
 
-// MetricAPI definition.
-type MetricAPI interface {
-	ReportSpeed(context.Context, *speedtest.Server) error
-}
-
 // Monitor definition.
 type Monitor struct {
-	metricAPI MetricAPI
-	logger    log.Logger
-	cfg       Config
-	targets   speedtest.Servers
+	logger  log.Logger
+	cfg     Config
+	targets speedtest.Servers
 }
 
 // New constructs a new speedtest monitor.
-func New(ctx context.Context, metricAPI MetricAPI, logger log.Logger, cfg Config) (*Monitor, error) {
+func New(ctx context.Context, logger log.Logger, cfg Config) (*Monitor, error) {
 	user, err := speedtest.FetchUserInfoContext(ctx)
 	if err != nil {
 		return nil, err
@@ -46,7 +66,7 @@ func New(ctx context.Context, metricAPI MetricAPI, logger log.Logger, cfg Config
 	if err != nil {
 		return nil, err
 	}
-	return &Monitor{metricAPI: metricAPI, logger: logger, cfg: cfg, targets: targets}, nil
+	return &Monitor{logger: logger, cfg: cfg, targets: targets}, nil
 }
 
 // Monitor starts the measurement.
@@ -81,6 +101,7 @@ func (sm *Monitor) measure(ctx context.Context, srv *speedtest.Server) {
 		sm.logger.Printf("speedtest: failed pint test: %v\n", err)
 		return
 	}
+	latencyGauge.WithLabelValues(serverName).Set(srv.Latency.Seconds())
 
 	err = srv.DownloadTestContext(ctx, false)
 	if err != nil {
@@ -88,16 +109,15 @@ func (sm *Monitor) measure(ctx context.Context, srv *speedtest.Server) {
 		return
 	}
 
+	speedGauge.WithLabelValues(serverName, "dl").Set(srv.DLSpeed)
+
 	err = srv.UploadTestContext(ctx, false)
 	if err != nil {
 		sm.logger.Printf("speedtest: failed upload test: %v\n", err)
 		return
 	}
 
+	speedGauge.WithLabelValues(serverName, "ul").Set(srv.ULSpeed)
+
 	sm.logger.Printf("speedtest for host: %s, latency: %s, dl: %f, ul: %f\n", serverName, srv.Latency, srv.DLSpeed, srv.ULSpeed)
-	err = sm.metricAPI.ReportSpeed(ctx, srv)
-	if err != nil {
-		sm.logger.Printf("speedtest: failed report metrics: %v\n", err)
-		return
-	}
 }
