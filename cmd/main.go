@@ -33,7 +33,7 @@ func run(logger log.Logger) error {
 		return err
 	}
 
-	logger.Printf("starting monitoring: %v", cfg)
+	logger.Printf("starting monitoring: %+v", cfg)
 
 	ctx, cnl := context.WithCancel(context.Background())
 	defer cnl()
@@ -111,7 +111,7 @@ type config struct {
 func configFromEnv() (config, error) {
 	cfg := config{}
 
-	httpPort, err := getEnv("HTTP_PORT")
+	httpPort, err := getEnv("HTTP_PORT", "50001")
 	if err != nil {
 		return cfg, err
 	}
@@ -138,14 +138,14 @@ func getPingConfig() (ping.Config, error) {
 	var err error
 	cfg := ping.Config{}
 
-	url, err := getEnv("PING_ADDRESSES")
+	url, err := getEnv("PING_ADDRESSES", "1.1.1.1,8.8.8.8")
 	if err != nil {
 		return ping.Config{}, err
 	}
 
 	cfg.Addresses = strings.Split(url, ",")
 
-	secVal, err := getEnv("PING_INTERVAL_SECONDS")
+	secVal, err := getEnv("PING_INTERVAL_SECONDS", "60")
 	if err != nil {
 		return ping.Config{}, err
 	}
@@ -164,7 +164,7 @@ func getSpeedConfig() (speed.Config, error) {
 	var err error
 	cfg := speed.Config{}
 
-	ids, err := getEnv("SPEED_SERVER_IDS")
+	ids, err := getEnv("SPEED_SERVER_IDS", "")
 	if err != nil {
 		return speed.Config{}, err
 	}
@@ -178,7 +178,7 @@ func getSpeedConfig() (speed.Config, error) {
 		cfg.ServerIDs = append(cfg.ServerIDs, serverID)
 	}
 
-	secVal, err := getEnv("SPEED_INTERVAL_SECONDS")
+	secVal, err := getEnv("SPEED_INTERVAL_SECONDS", "3600")
 	if err != nil {
 		return speed.Config{}, err
 	}
@@ -193,13 +193,19 @@ func getSpeedConfig() (speed.Config, error) {
 	return cfg, nil
 }
 
-func getEnv(key string) (string, error) {
+func getEnv(key string, def string) (string, error) {
 	value, ok := os.LookupEnv(key)
-	if !ok {
+	if !ok && def == "" {
 		return "", fmt.Errorf("env var %s does not exist", key)
 	}
-	if value == "" {
-		return "", fmt.Errorf("env var %s does not exist", key)
+
+	if value != "" {
+		return value, nil
 	}
-	return value, nil
+
+	if def != "" {
+		return def, nil
+	}
+
+	return "", fmt.Errorf("env var %s does not exist and no default value is set", key)
 }
