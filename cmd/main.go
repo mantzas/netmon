@@ -33,6 +33,8 @@ func run(logger log.Logger) error {
 		return err
 	}
 
+	logger.Printf("starting monitoring: %v", cfg)
+
 	ctx, cnl := context.WithCancel(context.Background())
 	defer cnl()
 
