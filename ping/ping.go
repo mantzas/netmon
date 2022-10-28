@@ -14,10 +14,10 @@ var pingGauge = prometheus.NewGaugeVec(
 	prometheus.GaugeOpts{
 		Namespace: "netmon",
 		Subsystem: "ping",
-		Name:      "avg_rtt_seconds",
-		Help:      "Average RTT in seconds",
+		Name:      "rtt_seconds",
+		Help:      "RTT in seconds by type",
 	},
-	[]string{"address"},
+	[]string{"address", "type"},
 )
 
 func init() {
@@ -41,6 +41,9 @@ func Ping(address string) error {
 	stats := p.Statistics()
 
 	log.Printf("ping for %s: %dms\n", address, stats.AvgRtt.Milliseconds())
-	pingGauge.WithLabelValues(address).Set(stats.AvgRtt.Seconds())
+	pingGauge.WithLabelValues(address, "avg").Set(stats.AvgRtt.Seconds())
+	pingGauge.WithLabelValues(address, "min").Set(stats.MinRtt.Seconds())
+	pingGauge.WithLabelValues(address, "max").Set(stats.MaxRtt.Seconds())
+	pingGauge.WithLabelValues(address, "stddev").Set(stats.StdDevRtt.Seconds())
 	return nil
 }
