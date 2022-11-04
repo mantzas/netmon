@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -14,8 +15,6 @@ import (
 	"time"
 
 	"github.com/mantzas/netmon"
-	"github.com/mantzas/netmon/ping"
-	"github.com/mantzas/netmon/speed"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
@@ -40,41 +39,72 @@ func run() error {
 	chSignal := make(chan os.Signal, 1)
 	signal.Notify(chSignal, os.Interrupt, syscall.SIGTERM)
 
+	// Get the first measurements.
+	err = netmon.SpeedTest(ctx, cfg.serverIDs, false)
+	if err != nil {
+		return err
+	}
+
 	srv := createHTTPServer(cfg.httpPort)
 
 	wg := sync.WaitGroup{}
 
 	wg.Add(1)
+
 	go func() {
 		defer wg.Done()
 		err = srv.ListenAndServe()
-		if err != nil {
+		if !errors.Is(err, http.ErrServerClosed) {
 			log.Printf("failed to run HTTP listener: %v", err)
 		}
 	}()
 
-	scheduler, err := netmon.NewScheduler(cfg.ping, cfg.speed, ping.Ping, speed.Test)
-	if err != nil {
-		return err
-	}
+	wg.Add(1)
 
 	go func() {
 		defer wg.Done()
-		scheduler.Schedule(ctx)
+		process(ctx, cfg.pingInterval, cfg.speedInterval, cfg.serverIDs)
 	}()
+
+	sig := <-chSignal
+	log.Printf("signal %v received\n", sig)
+
+	err = srv.Close()
+	if err != nil {
+		log.Printf("failed to close HTTP listener: %v", err)
+	}
+
+	cnl()
+	wg.Wait()
+
+	return err
+}
+
+func process(ctx context.Context, pingInterval, speedInterval time.Duration, serverIDs []int) {
+	pingTicker := time.NewTicker(pingInterval)
+	speedTicker := time.NewTicker(speedInterval)
 
 	for {
 		select {
-		case sig := <-chSignal:
-			log.Printf("signal %v received\n", sig)
-			err = srv.Close()
-			if err != nil {
-				return fmt.Errorf("failed to close HTTP server: %v", err)
-			}
-			cnl()
 		case <-ctx.Done():
-			wg.Wait()
-			return nil
+			pingTicker.Stop()
+			speedTicker.Stop()
+			return
+		case <-pingTicker.C:
+			pingTicker.Stop()
+			err := netmon.SpeedTest(ctx, serverIDs, true)
+			if err != nil {
+				log.Println(err)
+			}
+			pingTicker.Reset(pingInterval)
+
+		case <-speedTicker.C:
+			speedTicker.Stop()
+			err := netmon.SpeedTest(ctx, serverIDs, false)
+			if err != nil {
+				log.Println(err)
+			}
+			speedTicker.Reset(speedInterval)
 		}
 	}
 }
@@ -94,9 +124,10 @@ func createHTTPServer(port int) *http.Server {
 }
 
 type config struct {
-	httpPort int
-	ping     netmon.PingConfig
-	speed    netmon.SpeedConfig
+	httpPort      int
+	serverIDs     []int
+	pingInterval  time.Duration
+	speedInterval time.Duration
 }
 
 func configFromEnv() (config, error) {
@@ -112,12 +143,17 @@ func configFromEnv() (config, error) {
 		return cfg, err
 	}
 
-	cfg.ping, err = getPingConfig()
+	cfg.pingInterval, err = getInterval("PING_INTERVAL_SECONDS", "60")
 	if err != nil {
 		return config{}, err
 	}
 
-	cfg.speed, err = getSpeedConfig()
+	cfg.speedInterval, err = getInterval("SPEED_INTERVAL_SECONDS", "3600")
+	if err != nil {
+		return config{}, err
+	}
+
+	cfg.serverIDs, err = getServerIDs()
 	if err != nil {
 		return config{}, err
 	}
@@ -125,63 +161,40 @@ func configFromEnv() (config, error) {
 	return cfg, nil
 }
 
-func getPingConfig() (netmon.PingConfig, error) {
+func getInterval(envVar, defaultValue string) (time.Duration, error) {
 	var err error
-	cfg := netmon.PingConfig{}
 
-	url, err := getEnv("PING_ADDRESSES", "1.1.1.1,8.8.8.8")
+	secVal, err := getEnv(envVar, defaultValue)
 	if err != nil {
-		return netmon.PingConfig{}, err
-	}
-
-	cfg.Addresses = strings.Split(url, ",")
-
-	secVal, err := getEnv("PING_INTERVAL_SECONDS", "60")
-	if err != nil {
-		return netmon.PingConfig{}, err
+		return 0, err
 	}
 
 	seconds, err := strconv.Atoi(secVal)
 	if err != nil {
-		return netmon.PingConfig{}, fmt.Errorf("failed to convert ping interval: %v", err)
+		return 0, fmt.Errorf("failed to convert ping interval: %v", err)
 	}
 
-	cfg.Interval = time.Duration(seconds) * time.Second
-
-	return cfg, nil
+	return time.Duration(seconds) * time.Second, nil
 }
 
-func getSpeedConfig() (netmon.SpeedConfig, error) {
-	var err error
-	cfg := netmon.SpeedConfig{}
+func getServerIDs() ([]int, error) {
+	serverIDs := make([]int, 0)
 
 	ids, err := getEnv("SPEED_SERVER_IDS", "")
 	if err != nil {
-		return netmon.SpeedConfig{}, err
+		return nil, err
 	}
 
 	for _, id := range strings.Split(ids, ",") {
 		serverID, err := strconv.Atoi(id)
 		if err != nil {
-			return netmon.SpeedConfig{}, fmt.Errorf("failed to convert server id [%s]: %v", id, err)
+			return nil, fmt.Errorf("failed to convert server id [%s]: %v", id, err)
 		}
 
-		cfg.ServerIDs = append(cfg.ServerIDs, serverID)
+		serverIDs = append(serverIDs, serverID)
 	}
 
-	secVal, err := getEnv("SPEED_INTERVAL_SECONDS", "3600")
-	if err != nil {
-		return netmon.SpeedConfig{}, err
-	}
-
-	seconds, err := strconv.Atoi(secVal)
-	if err != nil {
-		return netmon.SpeedConfig{}, fmt.Errorf("failed to convert speed interval: %v", err)
-	}
-
-	cfg.Interval = time.Duration(seconds) * time.Second
-
-	return cfg, nil
+	return serverIDs, nil
 }
 
 func getEnv(key string, def string) (string, error) {
