@@ -3,7 +3,7 @@ module github.com/mantzas/netmon
 go 1.19
 
 require (
-	github.com/prometheus/client_golang v1.13.0
+	github.com/prometheus/client_golang v1.13.1
 	github.com/showwin/speedtest-go v1.1.5
 )
 
