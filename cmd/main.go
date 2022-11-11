@@ -31,7 +31,7 @@ func run() error {
 		return err
 	}
 
-	log.Printf("starting monitoring: %+v", cfg)
+	log.Printf("starting monitoring: %v", cfg)
 
 	ctx, cnl := context.WithCancel(context.Background())
 	defer cnl()
@@ -128,6 +128,10 @@ type config struct {
 	serverIDs     []int
 	pingInterval  time.Duration
 	speedInterval time.Duration
+}
+
+func (c config) String() string {
+	return fmt.Sprintf("port: %d server ids: %v ping interval: %v speed interval: %v", c.httpPort, c.serverIDs, c.pingInterval, c.speedInterval)
 }
 
 func configFromEnv() (config, error) {
