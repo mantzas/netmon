@@ -29,7 +29,7 @@ github.com/prometheus/common/model
 github.com/prometheus/procfs
 github.com/prometheus/procfs/internal/fs
 github.com/prometheus/procfs/internal/util
-# github.com/showwin/speedtest-go v1.2.1
+# github.com/showwin/speedtest-go v1.3.0
 ## explicit; go 1.16
 github.com/showwin/speedtest-go/speedtest
 # golang.org/x/sync v0.0.0-20220601150217-0de741cfad7f
