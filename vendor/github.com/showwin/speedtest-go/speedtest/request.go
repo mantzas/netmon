@@ -2,235 +2,92 @@ package speedtest
 
 import (
 	"context"
-	"io"
+	"errors"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
-
-	"golang.org/x/sync/errgroup"
 )
 
-type downloadWarmUpFunc func(context.Context, *http.Client, string) error
-type downloadFunc func(context.Context, *http.Client, string, int) error
-type uploadWarmUpFunc func(context.Context, *http.Client, string) error
-type uploadFunc func(context.Context, *http.Client, string, int) error
+type (
+	downloadFunc func(context.Context, *Server, int) error
+	uploadFunc   func(context.Context, *Server, int) error
+)
 
-var dlSizes = [...]int{350, 500, 750, 1000, 1500, 2000, 2500, 3000, 3500, 4000}
-var ulSizes = [...]int{100, 300, 500, 800, 1000, 1500, 2500, 3000, 3500, 4000} //kB
+var (
+	dlSizes = [...]int{350, 500, 750, 1000, 1500, 2000, 2500, 3000, 3500, 4000}
+	ulSizes = [...]int{100, 300, 500, 800, 1000, 1500, 2500, 3000, 3500, 4000} // kB
+)
 
 // DownloadTest executes the test to measure download speed
 func (s *Server) DownloadTest(savingMode bool) error {
-	return s.downloadTestContext(context.Background(), savingMode, dlWarmUp, downloadRequest)
+	return s.downloadTestContext(context.Background(), downloadRequest)
 }
 
 // DownloadTestContext executes the test to measure download speed, observing the given context.
-func (s *Server) DownloadTestContext(ctx context.Context, savingMode bool) error {
-	return s.downloadTestContext(ctx, savingMode, dlWarmUp, downloadRequest)
+func (s *Server) DownloadTestContext(ctx context.Context) error {
+	return s.downloadTestContext(ctx, downloadRequest)
 }
 
-func (s *Server) downloadTestContext(
-	ctx context.Context,
-	savingMode bool,
-	dlWarmUp downloadWarmUpFunc,
-	downloadRequest downloadFunc,
-) error {
-	dlURL := strings.Split(s.URL, "/upload.php")[0]
-	eg := errgroup.Group{}
-
-	// Warming up
-	sTime := time.Now()
-	for i := 0; i < 2; i++ {
-		eg.Go(func() error {
-			return dlWarmUp(ctx, s.doer, dlURL)
-		})
-	}
-	if err := eg.Wait(); err != nil {
-		return err
-	}
-	fTime := time.Now()
-
-	// If the bandwidth is too large, the download sometimes finish earlier than the latency.
-	// In this case, we ignore the latency that is included server information.
-	// This is not affected to the final result since this is a warm-up test.
-	timeToSpend := fTime.Sub(sTime.Add(s.Latency)).Seconds()
-	if timeToSpend < 0 {
-		timeToSpend = fTime.Sub(sTime).Seconds()
-	}
-
-	// 1.125MB for each request (750 * 750 * 2)
-	wuSpeed := 1.125 * 8 * 2 / timeToSpend
-
-	// Decide workload by warm up speed
-	workload := 0
-	weight := 0
-	skip := false
-	if savingMode {
-		workload = 6
-		weight = 3
-	} else if 50.0 < wuSpeed {
-		workload = 32
-		weight = 6
-	} else if 10.0 < wuSpeed {
-		workload = 16
-		weight = 4
-	} else if 4.0 < wuSpeed {
-		workload = 8
-		weight = 4
-	} else if 2.5 < wuSpeed {
-		workload = 4
-		weight = 4
-	} else {
-		skip = true
-	}
-
-	// Main speedtest
-	dlSpeed := wuSpeed
-	if !skip {
-		sTime = time.Now()
-		for i := 0; i < workload; i++ {
-			eg.Go(func() error {
-				return downloadRequest(ctx, s.doer, dlURL, weight)
-			})
-		}
-		if err := eg.Wait(); err != nil {
-			return err
-		}
-		fTime = time.Now()
-
-		reqMB := dlSizes[weight] * dlSizes[weight] * 2 / 1000 / 1000
-		dlSpeed = float64(reqMB) * 8 * float64(workload) / fTime.Sub(sTime).Seconds()
-	}
-
-	s.DLSpeed = dlSpeed
+func (s *Server) downloadTestContext(ctx context.Context, downloadRequest downloadFunc) error {
+	s.Context.DownloadRateCaptureHandler(func() {
+		_ = downloadRequest(ctx, s, 3)
+	})
+	s.DLSpeed = s.Context.GetAvgDownloadRate()
 	return nil
 }
 
 // UploadTest executes the test to measure upload speed
 func (s *Server) UploadTest(savingMode bool) error {
-	return s.uploadTestContext(context.Background(), savingMode, ulWarmUp, uploadRequest)
+	return s.uploadTestContext(context.Background(), uploadRequest)
 }
 
 // UploadTestContext executes the test to measure upload speed, observing the given context.
 func (s *Server) UploadTestContext(ctx context.Context, savingMode bool) error {
-	return s.uploadTestContext(ctx, savingMode, ulWarmUp, uploadRequest)
+	return s.uploadTestContext(ctx, uploadRequest)
 }
-func (s *Server) uploadTestContext(
-	ctx context.Context,
-	savingMode bool,
-	ulWarmUp uploadWarmUpFunc,
-	uploadRequest uploadFunc,
-) error {
-	// Warm up
-	sTime := time.Now()
-	eg := errgroup.Group{}
-	for i := 0; i < 2; i++ {
-		eg.Go(func() error {
-			return ulWarmUp(ctx, s.doer, s.URL)
-		})
-	}
-	if err := eg.Wait(); err != nil {
-		return err
-	}
-	fTime := time.Now()
 
-	timeToSpend := fTime.Sub(sTime.Add(s.Latency)).Seconds()
-	if timeToSpend < 0 {
-		timeToSpend = fTime.Sub(sTime).Seconds()
-	}
-
-	// 1.0 MB for each request
-	wuSpeed := 1.0 * 8 * 2 / timeToSpend
-
-	// Decide workload by warm up speed
-	workload := 0
-	weight := 0
-	skip := false
-	if savingMode {
-		workload = 1
-		weight = 7
-	} else if 50.0 < wuSpeed {
-		workload = 40
-		weight = 9
-	} else if 10.0 < wuSpeed {
-		workload = 16
-		weight = 9
-	} else if 4.0 < wuSpeed {
-		workload = 8
-		weight = 9
-	} else if 2.5 < wuSpeed {
-		workload = 4
-		weight = 5
-	} else {
-		skip = true
-	}
-
-	// Main speedtest
-	ulSpeed := wuSpeed
-	if !skip {
-		sTime = time.Now()
-		for i := 0; i < workload; i++ {
-			eg.Go(func() error {
-				return uploadRequest(ctx, s.doer, s.URL, weight)
-			})
-		}
-		if err := eg.Wait(); err != nil {
-			return err
-		}
-		fTime = time.Now()
-
-		reqMB := float64(ulSizes[weight]) / 1000
-		ulSpeed = reqMB * 8 * float64(workload) / fTime.Sub(sTime).Seconds()
-	}
-
-	s.ULSpeed = ulSpeed
-
+func (s *Server) uploadTestContext(ctx context.Context, uploadRequest uploadFunc) error {
+	s.Context.UploadRateCaptureHandler(func() {
+		_ = uploadRequest(ctx, s, 4)
+	})
+	s.ULSpeed = s.Context.GetAvgUploadRate()
 	return nil
 }
 
-func dlWarmUp(ctx context.Context, doer *http.Client, dlURL string) error {
-	return downloadRequest(ctx, doer, dlURL, 2)
-}
-
-func ulWarmUp(ctx context.Context, doer *http.Client, ulURL string) error {
-	return uploadRequest(ctx, doer, ulURL, 4)
-}
-
-func downloadRequest(ctx context.Context, doer *http.Client, dlURL string, w int) error {
+func downloadRequest(ctx context.Context, s *Server, w int) error {
 	size := dlSizes[w]
-	xdlURL := dlURL + "/random" + strconv.Itoa(size) + "x" + strconv.Itoa(size) + ".jpg"
+	xdlURL := strings.Split(s.URL, "/upload.php")[0] + "/random" + strconv.Itoa(size) + "x" + strconv.Itoa(size) + ".jpg"
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, xdlURL, nil)
 	if err != nil {
 		return err
 	}
 
-	resp, err := doer.Do(req)
+	resp, err := s.Context.doer.Do(req)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
-	_, err = io.Copy(io.Discard, resp.Body)
-	return err
+	return s.Context.NewChunk().DownloadHandler(resp.Body)
 }
 
-func uploadRequest(ctx context.Context, doer *http.Client, ulURL string, w int) error {
+func uploadRequest(ctx context.Context, s *Server, w int) error {
 	size := ulSizes[w]
-
-	reader := NewRepeatReader((size*100 - 51) * 10)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, ulURL, reader)
-	req.ContentLength = reader.ContentLength
+	dc := s.Context.NewChunk().UploadHandler(int64(size*100-51) * 10)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.URL, dc)
+	req.ContentLength = dc.(*DataChunk).ContentLength
 	if err != nil {
 		return err
 	}
 
 	req.Header.Set("Content-Type", "application/octet-stream")
-	resp, err := doer.Do(req)
+	resp, err := s.Context.doer.Do(req)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
-	_, err = io.Copy(io.Discard, resp.Body)
 	return err
 }
 
@@ -241,31 +98,163 @@ func (s *Server) PingTest() error {
 
 // PingTestContext executes test to measure latency, observing the given context.
 func (s *Server) PingTestContext(ctx context.Context) error {
+
 	pingURL := strings.Split(s.URL, "/upload.php")[0] + "/latency.txt"
 
-	l := time.Second * 10
-	for i := 0; i < 3; i++ {
-		sTime := time.Now()
-
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, pingURL, nil)
-		if err != nil {
-			return err
-		}
-
-		resp, err := s.doer.Do(req)
-		if err != nil {
-			return err
-		}
-
-		fTime := time.Now()
-		if fTime.Sub(sTime) < l {
-			l = fTime.Sub(sTime)
-		}
-
-		resp.Body.Close()
+	vectorPingResult, err := s.HTTPPing(ctx, pingURL, 10, time.Millisecond*200, nil)
+	if err != nil || len(vectorPingResult) == 0 {
+		return err
 	}
 
-	s.Latency = time.Duration(int64(l.Nanoseconds() / 2))
-
+	mean, _, std, min, max := standardDeviation(vectorPingResult)
+	s.Latency = time.Duration(mean) * time.Nanosecond
+	s.Jitter = time.Duration(std) * time.Nanosecond
+	s.MinLatency = time.Duration(min) * time.Nanosecond
+	s.MaxLatency = time.Duration(max) * time.Nanosecond
 	return nil
+}
+
+func (s *Server) HTTPPing(
+	ctx context.Context,
+	dst string,
+	echoTimes int,
+	echoFreq time.Duration,
+	callback func(latency time.Duration),
+) ([]int64, error) {
+
+	failTimes := 0
+	var latencies []int64
+
+	for i := 0; i < echoTimes; i++ {
+		sTime := time.Now()
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, dst, nil)
+		if err != nil {
+			return nil, err
+		}
+
+		resp, err := s.Context.doer.Do(req)
+
+		endTime := time.Since(sTime)
+		if err != nil {
+			failTimes++
+			continue
+		}
+		resp.Body.Close()
+		latencies = append(latencies, endTime.Nanoseconds()/2)
+		if callback != nil {
+			callback(endTime)
+		}
+		time.Sleep(echoFreq)
+	}
+	if failTimes == echoTimes {
+		return nil, errors.New("server connect timeout")
+	}
+	return latencies, nil
+}
+
+func (s *Server) ICMPPing(
+	ctx context.Context,
+	dst string,
+	readTimeout int,
+	echoOptionDataSize int,
+	echoTimes int,
+	echoFreq time.Duration,
+	callback func(latency time.Duration),
+) (latencies []int64, err error) {
+	dialContext, err := s.Context.ipDialer.DialContext(ctx, "ip:icmp", dst)
+	if err != nil {
+		return nil, err
+	}
+	defer dialContext.Close()
+
+	ICMPData := make([]byte, 8+echoOptionDataSize) // header + data
+	ICMPData[0] = 8                                // echo
+	ICMPData[1] = 0                                // code
+	ICMPData[2] = 0                                // checksum
+	ICMPData[3] = 0                                // checksum
+	ICMPData[4] = 0                                // id
+	ICMPData[5] = 1                                // id
+	ICMPData[6] = 0                                // seq
+	ICMPData[7] = 1                                // seq
+
+	var echoMessage = "Hi! SpeedTest-Go \\(●'◡'●)/"
+
+	for i := 0; i < len(echoMessage); i++ {
+		ICMPData[7+i] = echoMessage[i]
+	}
+
+	failTimes := 0
+	for i := 0; i < echoTimes; i++ {
+		ICMPData[2] = byte(0)
+		ICMPData[3] = byte(0)
+
+		ICMPData[6] = byte(1 >> 8)
+		ICMPData[7] = byte(1)
+		ICMPData[8+echoOptionDataSize-1] = 6
+		cs := checkSum(ICMPData)
+		ICMPData[2] = byte(cs >> 8)
+		ICMPData[3] = byte(cs)
+
+		sTime := time.Now()
+		_ = dialContext.SetDeadline(sTime.Add(time.Duration(readTimeout) * time.Millisecond))
+		_, err = dialContext.Write(ICMPData)
+		if err != nil {
+			failTimes += echoTimes - i
+			break
+		}
+		buf := make([]byte, 20+32+8)
+		_, err = dialContext.Read(buf)
+		if err != nil {
+			failTimes++
+			continue
+		}
+		endTime := time.Since(sTime)
+		latencies = append(latencies, endTime.Nanoseconds())
+		if callback != nil {
+			callback(endTime)
+		}
+		time.Sleep(echoFreq)
+	}
+	if failTimes == echoTimes {
+		return nil, errors.New("server connect timeout")
+	}
+	return
+}
+
+func checkSum(data []byte) uint16 {
+	var sum uint32
+	var length = len(data)
+	var index int
+	for length > 1 {
+		sum += uint32(data[index])<<8 + uint32(data[index+1])
+		index += 2
+		length -= 2
+	}
+	if length > 0 {
+		sum += uint32(data[index])
+	}
+	sum += sum >> 16
+	return uint16(^sum)
+}
+
+func standardDeviation(vector []int64) (mean, variance, stdDev, min, max int64) {
+	var sumNum, accumulate int64
+	min = math.MaxInt64
+	max = math.MinInt64
+	for _, value := range vector {
+		sumNum += value
+		if min > value {
+			min = value
+		}
+		if max < value {
+			max = value
+		}
+	}
+	mean = sumNum / int64(len(vector))
+	for _, value := range vector {
+		accumulate += (value - mean) * (value - mean)
+	}
+	variance = accumulate / int64(len(vector))
+	stdDev = int64(math.Sqrt(float64(variance)))
+	return
 }
