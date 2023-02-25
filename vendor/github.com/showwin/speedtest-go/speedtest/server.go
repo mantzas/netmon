@@ -8,13 +8,18 @@ import (
 	"fmt"
 	"math"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
+	"strings"
+	"sync"
 	"time"
 )
 
-const speedTestServersUrl = "https://www.speedtest.net/api/js/servers?limit=10"
-const speedTestServersAlternativeUrl = "https://www.speedtest.net/speedtest-servers-static.php"
+const (
+	speedTestServersUrl            = "https://www.speedtest.net/api/js/servers?"
+	speedTestServersAlternativeUrl = "https://www.speedtest.net/speedtest-servers-static.php"
+)
 
 type PayloadType int
 
@@ -25,21 +30,53 @@ const (
 
 // Server information
 type Server struct {
-	URL      string        `xml:"url,attr" json:"url"`
-	Lat      string        `xml:"lat,attr" json:"lat"`
-	Lon      string        `xml:"lon,attr" json:"lon"`
-	Name     string        `xml:"name,attr" json:"name"`
-	Country  string        `xml:"country,attr" json:"country"`
-	Sponsor  string        `xml:"sponsor,attr" json:"sponsor"`
-	ID       string        `xml:"id,attr" json:"id"`
-	URL2     string        `xml:"url2,attr" json:"url_2"`
-	Host     string        `xml:"host,attr" json:"host"`
-	Distance float64       `json:"distance"`
-	Latency  time.Duration `json:"latency"`
-	DLSpeed  float64       `json:"dl_speed"`
-	ULSpeed  float64       `json:"ul_speed"`
+	URL        string        `xml:"url,attr" json:"url"`
+	Lat        string        `xml:"lat,attr" json:"lat"`
+	Lon        string        `xml:"lon,attr" json:"lon"`
+	Name       string        `xml:"name,attr" json:"name"`
+	Country    string        `xml:"country,attr" json:"country"`
+	Sponsor    string        `xml:"sponsor,attr" json:"sponsor"`
+	ID         string        `xml:"id,attr" json:"id"`
+	URL2       string        `xml:"url2,attr" json:"url_2"`
+	Host       string        `xml:"host,attr" json:"host"`
+	Distance   float64       `json:"distance"`
+	Latency    time.Duration `json:"latency"`
+	MaxLatency time.Duration `json:"max_latency"`
+	MinLatency time.Duration `json:"min_latency"`
+	Jitter     time.Duration `json:"jitter"`
+	DLSpeed    float64       `json:"dl_speed"`
+	ULSpeed    float64       `json:"ul_speed"`
 
-	doer *http.Client
+	Context *Speedtest
+}
+
+// CustomServer use defaultClient, given a URL string, return a new Server object, with as much
+// filled in as we can
+func CustomServer(host string) (*Server, error) {
+	return defaultClient.CustomServer(host)
+}
+
+// CustomServer given a URL string, return a new Server object, with as much
+// filled in as we can
+func (s *Speedtest) CustomServer(host string) (*Server, error) {
+	if !strings.HasSuffix(host, "/upload.php") {
+		return nil, errors.New("please use the full URL of the server, ending in '/upload.php'")
+	}
+	u, err := url.Parse(host)
+	if err != nil {
+		return nil, err
+	}
+	return &Server{
+		ID:      "Custom",
+		Lat:     "?",
+		Lon:     "?",
+		Country: "?",
+		URL:     host,
+		Name:    u.Host,
+		Host:    u.Host,
+		Sponsor: "?",
+		Context: s,
+	}, nil
 }
 
 // ServerList list of Server
@@ -56,13 +93,13 @@ type ByDistance struct {
 }
 
 // Len finds length of servers. For sorting servers.
-func (svrs Servers) Len() int {
-	return len(svrs)
+func (servers Servers) Len() int {
+	return len(servers)
 }
 
 // Swap swaps i-th and j-th. For sorting servers.
-func (svrs Servers) Swap(i, j int) {
-	svrs[i], svrs[j] = svrs[j], svrs[i]
+func (servers Servers) Swap(i, j int) {
+	servers[i], servers[j] = servers[j], servers[i]
 }
 
 // Less compares the distance. For sorting servers.
@@ -71,8 +108,8 @@ func (b ByDistance) Less(i, j int) bool {
 }
 
 // FetchServers retrieves a list of available servers
-func (client *Speedtest) FetchServers(user *User) (Servers, error) {
-	return client.FetchServerListContext(context.Background(), user)
+func (s *Speedtest) FetchServers(user *User) (Servers, error) {
+	return s.FetchServerListContext(context.Background(), user)
 }
 
 // FetchServers retrieves a list of available servers
@@ -81,14 +118,14 @@ func FetchServers(user *User) (Servers, error) {
 }
 
 // FetchServerListContext retrieves a list of available servers, observing the given context.
-func (client *Speedtest) FetchServerListContext(ctx context.Context, user *User) (Servers, error) {
+func (s *Speedtest) FetchServerListContext(ctx context.Context, user *User) (Servers, error) {
 	fetchUrl := fmt.Sprintf("%s&lat=%s&lon=%s", speedTestServersUrl, user.VLat, user.VLon)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fetchUrl, nil)
 	if err != nil {
 		return Servers{}, err
 	}
 
-	resp, err := client.doer.Do(req)
+	resp, err := s.doer.Do(req)
 	if err != nil {
 		return Servers{}, err
 	}
@@ -103,7 +140,7 @@ func (client *Speedtest) FetchServerListContext(ctx context.Context, user *User)
 			return Servers{}, err
 		}
 
-		resp, err = client.doer.Do(req)
+		resp, err = s.doer.Do(req)
 		if err != nil {
 			return Servers{}, err
 		}
@@ -138,8 +175,8 @@ func (client *Speedtest) FetchServerListContext(ctx context.Context, user *User)
 	}
 
 	// set doer of server
-	for _, s := range servers {
-		s.doer = client.doer
+	for _, server := range servers {
+		server.Context = s
 	}
 
 	// Calculate distance
@@ -158,6 +195,23 @@ func (client *Speedtest) FetchServerListContext(ctx context.Context, user *User)
 		return servers, errors.New("unable to retrieve server list")
 	}
 
+	var wg sync.WaitGroup
+	pCtx, fc := context.WithTimeout(context.Background(), time.Second*5)
+	for _, server := range servers {
+		wg.Add(1)
+		go func(gs *Server) {
+			pingURL := strings.Split(gs.URL, "/upload.php")[0] + "/latency.txt"
+			if latency, err2 := gs.HTTPPing(pCtx, pingURL, 1, time.Millisecond, nil); err2 != nil || len(latency) != 1 {
+				gs.Latency = -1
+			} else {
+				gs.Latency = time.Duration(latency[0]) * time.Nanosecond
+			}
+			wg.Done()
+		}(server)
+	}
+
+	wg.Wait()
+	fc()
 	return servers, nil
 }
 
@@ -179,43 +233,54 @@ func distance(lat1 float64, lon1 float64, lat2 float64, lon2 float64) float64 {
 }
 
 // FindServer finds server by serverID
-func (l Servers) FindServer(serverID []int) (Servers, error) {
-	servers := Servers{}
+func (servers Servers) FindServer(serverID []int) (Servers, error) {
+	retServer := Servers{}
 
-	if len(l) <= 0 {
-		return servers, errors.New("no servers available")
+	if len(servers) <= 0 {
+		return retServer, errors.New("no servers available")
 	}
 
 	for _, sid := range serverID {
-		for _, s := range l {
+		for _, s := range servers {
 			id, _ := strconv.Atoi(s.ID)
 			if sid == id {
-				servers = append(servers, s)
+				retServer = append(retServer, s)
 			}
 		}
 	}
 
-	if len(servers) == 0 {
-		servers = append(servers, l[0])
+	if len(retServer) == 0 {
+		// choose the lowest latency server
+		var min int64 = math.MaxInt64
+		var minServerIndex int
+		for index, server := range servers {
+			if server.Latency <= 0 {
+				continue
+			}
+			if min > server.Latency.Milliseconds() {
+				min = server.Latency.Milliseconds()
+				minServerIndex = index
+			}
+		}
+		retServer = append(retServer, servers[minServerIndex])
 	}
-
-	return servers, nil
+	return retServer, nil
 }
 
 // String representation of ServerList
-func (l ServerList) String() string {
+func (servers ServerList) String() string {
 	slr := ""
-	for _, s := range l.Servers {
-		slr += s.String()
+	for _, server := range servers.Servers {
+		slr += server.String()
 	}
 	return slr
 }
 
 // String representation of Servers
-func (l Servers) String() string {
+func (servers Servers) String() string {
 	slr := ""
-	for _, s := range l {
-		slr += s.String()
+	for _, server := range servers {
+		slr += server.String()
 	}
 	return slr
 }
@@ -226,6 +291,6 @@ func (s *Server) String() string {
 }
 
 // CheckResultValid checks that results are logical given UL and DL speeds
-func (s Server) CheckResultValid() bool {
+func (s *Server) CheckResultValid() bool {
 	return !(s.DLSpeed*100 < s.ULSpeed) || !(s.DLSpeed > s.ULSpeed*100)
 }
