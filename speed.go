@@ -70,7 +70,7 @@ func SpeedTest(ctx context.Context, serverIDs []int, pingOnly bool) error {
 			continue
 		}
 
-		err = server.DownloadTestContext(ctx, false)
+		err = server.DownloadTestContext(ctx)
 		if err != nil {
 			return fmt.Errorf("speedtest: failed download test: %w", err)
 		}
