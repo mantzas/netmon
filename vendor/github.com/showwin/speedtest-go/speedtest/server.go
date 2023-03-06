@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	speedTestServersUrl            = "https://www.speedtest.net/api/js/servers?"
+	speedTestServersUrl            = "https://www.speedtest.net/api/js/servers"
 	speedTestServersAlternativeUrl = "https://www.speedtest.net/speedtest-servers-static.php"
 )
 
@@ -95,7 +95,7 @@ type ByDistance struct {
 func (servers Servers) Available() *Servers {
 	retServer := Servers{}
 	for _, server := range servers {
-		if server.Latency != -1 {
+		if server.Latency != PingTimeout {
 			retServer = append(retServer, server)
 		}
 	}
@@ -136,8 +136,21 @@ func FetchServers(user *User) (Servers, error) {
 
 // FetchServerListContext retrieves a list of available servers, observing the given context.
 func (s *Speedtest) FetchServerListContext(ctx context.Context, user *User) (Servers, error) {
-	fetchUrl := fmt.Sprintf("%s&lat=%s&lon=%s", speedTestServersUrl, user.VLat, user.VLon)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fetchUrl, nil)
+	u, err := url.Parse(speedTestServersUrl)
+	if err != nil {
+		return Servers{}, err
+	}
+	query := u.Query()
+	if len(s.config.Keyword) > 0 {
+		query.Set("search", s.config.Keyword)
+	}
+	if s.config.Location != nil {
+		query.Set("lat", strconv.FormatFloat(s.config.Location.Lat, 'f', -1, 64))
+		query.Set("lon", strconv.FormatFloat(s.config.Location.Lon, 'f', -1, 64))
+	}
+	u.RawQuery = query.Encode()
+	dbg.Printf("Retrieving servers: %s\n", u.String())
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
 		return Servers{}, err
 	}
@@ -174,7 +187,7 @@ func (s *Speedtest) FetchServerListContext(ctx context.Context, user *User) (Ser
 		// Decode xml
 		decoder := json.NewDecoder(resp.Body)
 
-		if err := decoder.Decode(&servers); err != nil {
+		if err = decoder.Decode(&servers); err != nil {
 			return servers, err
 		}
 	case XMLPayload:
@@ -182,7 +195,7 @@ func (s *Speedtest) FetchServerListContext(ctx context.Context, user *User) (Ser
 		// Decode xml
 		decoder := xml.NewDecoder(resp.Body)
 
-		if err := decoder.Decode(&list); err != nil {
+		if err = decoder.Decode(&list); err != nil {
 			return servers, err
 		}
 
@@ -191,6 +204,7 @@ func (s *Speedtest) FetchServerListContext(ctx context.Context, user *User) (Ser
 		return servers, fmt.Errorf("response payload decoding not implemented")
 	}
 
+	dbg.Printf("Servers Num: %d\n", len(servers))
 	// set doer of server
 	for _, server := range servers {
 		server.Context = s
@@ -214,12 +228,18 @@ func (s *Speedtest) FetchServerListContext(ctx context.Context, user *User) (Ser
 
 	var wg sync.WaitGroup
 	pCtx, fc := context.WithTimeout(context.Background(), time.Second*5)
+	dbg.Println("Echo each server...")
 	for _, server := range servers {
 		wg.Add(1)
 		go func(gs *Server) {
-			pingURL := strings.Split(gs.URL, "/upload.php")[0] + "/latency.txt"
-			if latency, err2 := gs.HTTPPing(pCtx, pingURL, 1, time.Millisecond, nil); err2 != nil || len(latency) != 1 {
-				gs.Latency = -1
+			var latency []int64
+			if s.config.ICMP {
+				latency, err = gs.ICMPPing(pCtx, 4*time.Second, 1, time.Millisecond, nil)
+			} else {
+				latency, err = gs.HTTPPing(pCtx, 1, time.Millisecond, nil)
+			}
+			if err != nil || len(latency) < 1 {
+				gs.Latency = PingTimeout
 			} else {
 				gs.Latency = time.Duration(latency[0]) * time.Nanosecond
 			}

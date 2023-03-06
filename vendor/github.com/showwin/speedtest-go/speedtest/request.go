@@ -3,8 +3,10 @@ package speedtest
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -20,52 +22,62 @@ var (
 	ulSizes = [...]int{100, 300, 500, 800, 1000, 1500, 2500, 3000, 3500, 4000} // kB
 )
 
-func (s *Server) MultiDownloadTestContext(ctx context.Context, servers Servers, savingMode bool) error {
+func (s *Server) MultiDownloadTestContext(ctx context.Context, servers Servers) error {
+	if s.Context.config.NoDownload {
+		dbg.Println("Download test disabled")
+		return nil
+	}
 	ss := servers.Available()
 	if ss.Len() == 0 {
 		return errors.New("not found available servers")
 	}
 	mainIDIndex := 0
 	var fp *FuncGroup
+	_context, cancel := context.WithCancel(ctx)
 	for i, server := range *ss {
 		if server.ID == s.ID {
 			mainIDIndex = i
 		}
 		sp := server
+		dbg.Printf("Register Download Handler: %s\n", sp.URL)
 		fp = server.Context.RegisterDownloadHandler(func() {
-			_ = downloadRequest(ctx, sp, 3)
+			_ = downloadRequest(_context, sp, 3)
 		})
 	}
-	fp.Start(mainIDIndex) // block here
-	//var serverPointer *Server = (*ss)[0]
+	fp.Start(cancel, mainIDIndex) // block here
 	s.DLSpeed = fp.manager.GetAvgDownloadRate()
 	return nil
 }
 
-func (s *Server) MultiUploadTestContext(ctx context.Context, servers Servers, savingMode bool) error {
+func (s *Server) MultiUploadTestContext(ctx context.Context, servers Servers) error {
+	if s.Context.config.NoUpload {
+		dbg.Println("Upload test disabled")
+		return nil
+	}
 	ss := servers.Available()
 	if ss.Len() == 0 {
 		return errors.New("not found available servers")
 	}
 	mainIDIndex := 0
 	var fp *FuncGroup
+	_context, cancel := context.WithCancel(ctx)
 	for i, server := range *ss {
 		if server.ID == s.ID {
 			mainIDIndex = i
 		}
 		sp := server
+		dbg.Printf("Register Upload Handler: %s\n", sp.URL)
 		fp = server.Context.RegisterUploadHandler(func() {
-			_ = uploadRequest(ctx, sp, 3)
+			_ = uploadRequest(_context, sp, 3)
 		})
 	}
-	fp.Start(mainIDIndex) // block here
-	//var serverPointer *Server = (*ss)[0]
+	fp.Start(cancel, mainIDIndex) // block here
 	s.ULSpeed = fp.manager.GetAvgUploadRate()
 	return nil
 }
 
 // DownloadTest executes the test to measure download speed
-func (s *Server) DownloadTest(savingMode bool) error {
+func (s *Server) DownloadTest() error {
 	return s.downloadTestContext(context.Background(), downloadRequest)
 }
 
@@ -75,27 +87,37 @@ func (s *Server) DownloadTestContext(ctx context.Context) error {
 }
 
 func (s *Server) downloadTestContext(ctx context.Context, downloadRequest downloadFunc) error {
+	if s.Context.config.NoDownload {
+		dbg.Println("Download test disabled")
+		return nil
+	}
+	_context, cancel := context.WithCancel(ctx)
 	s.Context.RegisterDownloadHandler(func() {
-		_ = downloadRequest(ctx, s, 3)
-	}).Start(0)
+		_ = downloadRequest(_context, s, 3)
+	}).Start(cancel, 0)
 	s.DLSpeed = s.Context.GetAvgDownloadRate()
 	return nil
 }
 
 // UploadTest executes the test to measure upload speed
-func (s *Server) UploadTest(savingMode bool) error {
+func (s *Server) UploadTest() error {
 	return s.uploadTestContext(context.Background(), uploadRequest)
 }
 
 // UploadTestContext executes the test to measure upload speed, observing the given context.
-func (s *Server) UploadTestContext(ctx context.Context, savingMode bool) error {
+func (s *Server) UploadTestContext(ctx context.Context) error {
 	return s.uploadTestContext(ctx, uploadRequest)
 }
 
 func (s *Server) uploadTestContext(ctx context.Context, uploadRequest uploadFunc) error {
+	if s.Context.config.NoUpload {
+		dbg.Println("Upload test disabled")
+		return nil
+	}
+	_context, cancel := context.WithCancel(ctx)
 	s.Context.RegisterUploadHandler(func() {
-		_ = uploadRequest(ctx, s, 4)
-	}).Start(0)
+		_ = uploadRequest(_context, s, 4)
+	}).Start(cancel, 0)
 	s.ULSpeed = s.Context.GetAvgUploadRate()
 	return nil
 }
@@ -103,6 +125,7 @@ func (s *Server) uploadTestContext(ctx context.Context, uploadRequest uploadFunc
 func downloadRequest(ctx context.Context, s *Server, w int) error {
 	size := dlSizes[w]
 	xdlURL := strings.Split(s.URL, "/upload.php")[0] + "/random" + strconv.Itoa(size) + "x" + strconv.Itoa(size) + ".jpg"
+	dbg.Printf("XdlURL: %s\n", xdlURL)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, xdlURL, nil)
 	if err != nil {
 		return err
@@ -121,6 +144,7 @@ func uploadRequest(ctx context.Context, s *Server, w int) error {
 	dc := s.Context.NewChunk().UploadHandler(int64(size*100-51) * 10)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.URL, dc)
 	req.ContentLength = dc.(*DataChunk).ContentLength
+	dbg.Printf("Len=%d, XulURL: %s\n", req.ContentLength, s.URL)
 	if err != nil {
 		return err
 	}
@@ -140,15 +164,17 @@ func (s *Server) PingTest() error {
 }
 
 // PingTestContext executes test to measure latency, observing the given context.
-func (s *Server) PingTestContext(ctx context.Context) error {
-
-	pingURL := strings.Split(s.URL, "/upload.php")[0] + "/latency.txt"
-
-	vectorPingResult, err := s.HTTPPing(ctx, pingURL, 10, time.Millisecond*200, nil)
+func (s *Server) PingTestContext(ctx context.Context) (err error) {
+	var vectorPingResult []int64
+	if s.Context.config.ICMP {
+		vectorPingResult, err = s.ICMPPing(ctx, time.Second*4, 10, time.Millisecond*200, nil)
+	} else {
+		vectorPingResult, err = s.HTTPPing(ctx, 10, time.Millisecond*200, nil)
+	}
 	if err != nil || len(vectorPingResult) == 0 {
 		return err
 	}
-
+	dbg.Printf("Before StandardDeviation: %v\n", vectorPingResult)
 	mean, _, std, min, max := standardDeviation(vectorPingResult)
 	s.Latency = time.Duration(mean) * time.Nanosecond
 	s.Jitter = time.Duration(std) * time.Nanosecond
@@ -159,52 +185,59 @@ func (s *Server) PingTestContext(ctx context.Context) error {
 
 func (s *Server) HTTPPing(
 	ctx context.Context,
-	dst string,
 	echoTimes int,
 	echoFreq time.Duration,
 	callback func(latency time.Duration),
-) ([]int64, error) {
-
+) (latencies []int64, err error) {
+	u, err := url.Parse(s.URL)
+	if err != nil || len(u.Host) == 0 {
+		return nil, err
+	}
+	pingDst := fmt.Sprintf("%s/latency.txt", s.URL)
+	dbg.Printf("Echo: %s\n", pingDst)
 	failTimes := 0
-	var latencies []int64
-
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, pingDst, nil)
+	if err != nil {
+		return nil, err
+	}
 	for i := 0; i < echoTimes; i++ {
 		sTime := time.Now()
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, dst, nil)
-		if err != nil {
-			return nil, err
-		}
-
-		resp, err := s.Context.doer.Do(req)
-
+		_, err = s.Context.doer.Do(req)
 		endTime := time.Since(sTime)
 		if err != nil {
 			failTimes++
 			continue
 		}
-		resp.Body.Close()
 		latencies = append(latencies, endTime.Nanoseconds()/2)
+		dbg.Printf("2RTT: %s\n", endTime)
 		if callback != nil {
-			callback(endTime)
+			callback(endTime / 2)
 		}
 		time.Sleep(echoFreq)
 	}
 	if failTimes == echoTimes {
 		return nil, errors.New("server connect timeout")
 	}
-	return latencies, nil
+	return
 }
 
+const PingTimeout = -1
+const echoOptionDataSize = 32 // `echoMessage` need to change at same time
+
+// ICMPPing privileged method
 func (s *Server) ICMPPing(
 	ctx context.Context,
-	dst string,
-	readTimeout int,
-	echoOptionDataSize int,
+	readTimeout time.Duration,
 	echoTimes int,
 	echoFreq time.Duration,
 	callback func(latency time.Duration),
 ) (latencies []int64, err error) {
-	dialContext, err := s.Context.ipDialer.DialContext(ctx, "ip:icmp", dst)
+	u, err := url.ParseRequestURI(s.URL)
+	if err != nil || len(u.Host) == 0 {
+		return nil, err
+	}
+	dbg.Printf("Echo: %s\n", strings.Split(u.Host, ":")[0])
+	dialContext, err := s.Context.ipDialer.DialContext(ctx, "ip:icmp", strings.Split(u.Host, ":")[0])
 	if err != nil {
 		return nil, err
 	}
@@ -239,13 +272,13 @@ func (s *Server) ICMPPing(
 		ICMPData[3] = byte(cs)
 
 		sTime := time.Now()
-		_ = dialContext.SetDeadline(sTime.Add(time.Duration(readTimeout) * time.Millisecond))
+		_ = dialContext.SetDeadline(sTime.Add(readTimeout))
 		_, err = dialContext.Write(ICMPData)
 		if err != nil {
 			failTimes += echoTimes - i
 			break
 		}
-		buf := make([]byte, 20+32+8)
+		buf := make([]byte, 20+echoOptionDataSize+8)
 		_, err = dialContext.Read(buf)
 		if err != nil {
 			failTimes++
@@ -253,6 +286,7 @@ func (s *Server) ICMPPing(
 		}
 		endTime := time.Since(sTime)
 		latencies = append(latencies, endTime.Nanoseconds())
+		dbg.Printf("1RTT: %s\n", endTime)
 		if callback != nil {
 			callback(endTime)
 		}
