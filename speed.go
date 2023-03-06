@@ -77,7 +77,7 @@ func SpeedTest(ctx context.Context, serverIDs []int, pingOnly bool) error {
 
 		speedGauge.WithLabelValues(serverName, "dl").Set(server.DLSpeed)
 
-		err = server.UploadTestContext(ctx, false)
+		err = server.UploadTestContext(ctx)
 		if err != nil {
 			return fmt.Errorf("speedtest: failed upload test: %v", err)
 		}

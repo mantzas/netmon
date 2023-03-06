@@ -2,6 +2,7 @@ package speedtest
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"math"
@@ -12,8 +13,8 @@ import (
 )
 
 type Manager interface {
-	//SetRateCaptureFrequency(duration time.Duration) Manager
-	//SetCaptureTime(duration time.Duration) Manager
+	SetRateCaptureFrequency(duration time.Duration) Manager
+	SetCaptureTime(duration time.Duration) Manager
 
 	NewChunk() Chunk
 
@@ -92,7 +93,7 @@ func NewDataManager() *DataManager {
 	ret := &DataManager{
 		nThread:              runtime.NumCPU(),
 		captureTime:          time.Second * 10,
-		rateCaptureFrequency: time.Second,
+		rateCaptureFrequency: time.Millisecond * 100,
 	}
 	ret.dFn = &FuncGroup{manager: ret}
 	ret.uFn = &FuncGroup{manager: ret}
@@ -162,14 +163,14 @@ func (dm *DataManager) RegisterDownloadHandler(fn func()) *FuncGroup {
 	return dm.dFn
 }
 
-func (f *FuncGroup) Start(mainRequestHandlerIndex int) {
+func (f *FuncGroup) Start(cancel context.CancelFunc, mainRequestHandlerIndex int) {
 	if len(f.fns) == 0 {
 		panic("empty task stack")
 	}
 	if mainRequestHandlerIndex > len(f.fns)-1 {
 		mainRequestHandlerIndex = 0
 	}
-	mainLoadFactor := 0.3
+	mainLoadFactor := 0.1
 	// When the number of processor cores is equivalent to the processing program,
 	// the processing efficiency reaches the highest level (VT is not considered).
 	mainN := int(mainLoadFactor * float64(len(f.fns)))
@@ -180,15 +181,18 @@ func (f *FuncGroup) Start(mainRequestHandlerIndex int) {
 		mainN = f.manager.nThread
 	}
 	auxN := f.manager.nThread - mainN
-
+	dbg.Printf("Available fns: %d\n", len(f.fns))
+	dbg.Printf("mainN: %d\n", mainN)
+	dbg.Printf("auxN: %d\n", auxN)
 	wg := sync.WaitGroup{}
 	f.manager.running = true
 	ticker := f.manager.rateCapture()
 	time.AfterFunc(f.manager.captureTime, func() {
 		ticker.Stop()
 		f.manager.running = false
+		cancel()
+		dbg.Println("FuncGroup: Stop")
 	})
-
 	for i := 0; i < mainN; i++ {
 		wg.Add(1)
 		go func() {
@@ -223,7 +227,6 @@ func (f *FuncGroup) Start(mainRequestHandlerIndex int) {
 			j++
 		}
 	}
-
 	wg.Wait()
 }
 
@@ -251,7 +254,6 @@ func (dm *DataManager) rateCapture() *time.Ticker {
 }
 
 func (dm *DataManager) NewChunk() Chunk {
-
 	var dc DataChunk
 	dc.manager = dm
 	dm.Lock()
@@ -276,12 +278,12 @@ func (dm *DataManager) GetTotalUpload() int64 {
 	return dm.totalUpload
 }
 
-func (dm *DataManager) SetRateCaptureFrequency(duration time.Duration) *DataManager {
+func (dm *DataManager) SetRateCaptureFrequency(duration time.Duration) Manager {
 	dm.rateCaptureFrequency = duration
 	return dm
 }
 
-func (dm *DataManager) SetCaptureTime(duration time.Duration) *DataManager {
+func (dm *DataManager) SetCaptureTime(duration time.Duration) Manager {
 	dm.captureTime = duration
 	return dm
 }
@@ -306,15 +308,13 @@ func (dm *DataManager) Reset() {
 }
 
 func (dm *DataManager) GetAvgDownloadRate() float64 {
-	unit := float64(time.Second / dm.rateCaptureFrequency)
-	d := calcMAFilter(pautaFilter(dm.DownloadRateSequence))
-	return d * 8 / 1000000 * unit
+	unit := float64(dm.captureTime / time.Millisecond)
+	return float64(dm.totalDownload*8/1000) / unit
 }
 
 func (dm *DataManager) GetAvgUploadRate() float64 {
-	unit := float64(time.Second / dm.rateCaptureFrequency)
-	d := calcMAFilter(pautaFilter(dm.UploadRateSequence))
-	return d * 8 / 1000000 * unit
+	unit := float64(dm.captureTime / time.Millisecond)
+	return float64(dm.totalUpload*8/1000) / unit
 }
 
 type DataChunk struct {
@@ -362,6 +362,9 @@ func (dc *DataChunk) DownloadHandler(r io.Reader) error {
 	bufP := blackHolePool.Get().(*[]byte)
 	readSize := 0
 	for {
+		if !dc.manager.running {
+			return nil
+		}
 		readSize, dc.err = r.Read(*bufP)
 		rs := int64(readSize)
 
@@ -404,6 +407,9 @@ func (dc *DataChunk) GetParent() Manager {
 }
 
 func (dc *DataChunk) Read(b []byte) (n int, err error) {
+	if !dc.manager.running {
+		return n, io.EOF
+	}
 	if dc.remainOrDiscardSize < readChunkSize {
 		if dc.remainOrDiscardSize <= 0 {
 			dc.endTime = time.Now()
@@ -420,7 +426,7 @@ func (dc *DataChunk) Read(b []byte) (n int, err error) {
 }
 
 // calcMAFilter Median-Averaging Filter
-func calcMAFilter(list []int64) float64 {
+func _(list []int64) float64 {
 	if len(list) == 0 {
 		return 0
 	}
@@ -444,6 +450,9 @@ func calcMAFilter(list []int64) float64 {
 }
 
 func pautaFilter(vector []int64) []int64 {
+	dbg.Println("Per capture unit")
+	dbg.Printf("Raw Sequence len: %d\n", len(vector))
+	dbg.Printf("Raw Sequence: %v\n", vector)
 	if len(vector) == 0 {
 		return vector
 	}
@@ -454,10 +463,13 @@ func pautaFilter(vector []int64) []int64 {
 			retVec = append(retVec, value)
 		}
 	}
+	dbg.Printf("Raw average: %dByte\n", mean)
+	dbg.Printf("Pauta Sequence len: %d\n", len(retVec))
+	dbg.Printf("Pauta Sequence: %v\n", retVec)
 	return retVec
 }
 
-// standardDeviation sample Variance
+// sampleVariance sample Variance
 func sampleVariance(vector []int64) (mean, variance, stdDev, min, max int64) {
 	if len(vector) == 0 {
 		return 0, 0, 0, 0, 0
