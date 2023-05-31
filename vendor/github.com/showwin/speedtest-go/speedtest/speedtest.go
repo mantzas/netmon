@@ -2,28 +2,31 @@ package speedtest
 
 import (
 	"fmt"
-	"io"
-	"log"
 	"net"
 	"net/http"
 	"net/url"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 )
 
 var (
-	version          = "1.5.2"
+	version          = "1.6.1"
 	DefaultUserAgent = fmt.Sprintf("showwin/speedtest-go %s", version)
 )
 
 // Speedtest is a speedtest client.
 type Speedtest struct {
+	User *User
+	Manager
+
 	doer      *http.Client
 	config    *UserConfig
 	tcpDialer *net.Dialer
 	ipDialer  *net.Dialer
-	Manager
+
+	asyncFetchUser *sync.WaitGroup
 }
 
 type UserConfig struct {
@@ -166,10 +169,10 @@ func WithUserConfig(userConfig *UserConfig) Option {
 
 // New creates a new speedtest client.
 func New(opts ...Option) *Speedtest {
-	log.SetOutput(io.Discard)
 	s := &Speedtest{
-		doer:    http.DefaultClient,
-		Manager: GlobalDataManager,
+		doer:           http.DefaultClient,
+		asyncFetchUser: &sync.WaitGroup{},
+		Manager:        GlobalDataManager,
 	}
 	// load default config
 	s.NewUserConfig(&UserConfig{UserAgent: DefaultUserAgent})
