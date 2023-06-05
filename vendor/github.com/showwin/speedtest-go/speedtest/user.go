@@ -60,7 +60,8 @@ func (s *Speedtest) FetchUserInfoContext(ctx context.Context) (*User, error) {
 		return nil, errors.New("failed to fetch user information")
 	}
 
-	return &users.Users[0], nil
+	s.User = &users.Users[0]
+	return s.User, nil
 }
 
 // FetchUserInfoContext returns information about caller determined by speedtest.net, observing the given context.
@@ -71,5 +72,5 @@ func FetchUserInfoContext(ctx context.Context) (*User, error) {
 // String representation of User
 func (u *User) String() string {
 	extInfo := ""
-	return fmt.Sprintf("%s, (%s) [%s, %s] %s", u.IP, u.Isp, u.Lat, u.Lon, extInfo)
+	return fmt.Sprintf("%s (%s) [%s, %s] %s", u.IP, u.Isp, u.Lat, u.Lon, extInfo)
 }
