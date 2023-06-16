@@ -19,48 +19,35 @@ import (
 const (
 	speedTestServersUrl            = "https://www.speedtest.net/api/js/servers"
 	speedTestServersAlternativeUrl = "https://www.speedtest.net/speedtest-servers-static.php"
-	speedTestServersAdvanced       = "https://www.speedtest.net/api/ios-config.php"
 )
 
-type payloadType int
+type PayloadType int
 
 const (
-	typeJSONPayload payloadType = iota
-	typeXMLPayload
-)
-
-var (
-	ErrServerNotFound = errors.New("no server available or found")
+	JSONPayload PayloadType = iota
+	XMLPayload
 )
 
 // Server information
 type Server struct {
-	URL          string        `xml:"url,attr" json:"url"`
-	Lat          string        `xml:"lat,attr" json:"lat"`
-	Lon          string        `xml:"lon,attr" json:"lon"`
-	Name         string        `xml:"name,attr" json:"name"`
-	Country      string        `xml:"country,attr" json:"country"`
-	Sponsor      string        `xml:"sponsor,attr" json:"sponsor"`
-	ID           string        `xml:"id,attr" json:"id"`
-	URL2         string        `xml:"url2,attr" json:"url_2"`
-	Host         string        `xml:"host,attr" json:"host"`
-	Distance     float64       `json:"distance"`
-	Latency      time.Duration `json:"latency"`
-	MaxLatency   time.Duration `json:"max_latency"`
-	MinLatency   time.Duration `json:"min_latency"`
-	Jitter       time.Duration `json:"jitter"`
-	DLSpeed      float64       `json:"dl_speed"`
-	ULSpeed      float64       `json:"ul_speed"`
-	TestDuration TestDuration  `json:"test_duration"`
+	URL        string        `xml:"url,attr" json:"url"`
+	Lat        string        `xml:"lat,attr" json:"lat"`
+	Lon        string        `xml:"lon,attr" json:"lon"`
+	Name       string        `xml:"name,attr" json:"name"`
+	Country    string        `xml:"country,attr" json:"country"`
+	Sponsor    string        `xml:"sponsor,attr" json:"sponsor"`
+	ID         string        `xml:"id,attr" json:"id"`
+	URL2       string        `xml:"url2,attr" json:"url_2"`
+	Host       string        `xml:"host,attr" json:"host"`
+	Distance   float64       `json:"distance"`
+	Latency    time.Duration `json:"latency"`
+	MaxLatency time.Duration `json:"max_latency"`
+	MinLatency time.Duration `json:"min_latency"`
+	Jitter     time.Duration `json:"jitter"`
+	DLSpeed    float64       `json:"dl_speed"`
+	ULSpeed    float64       `json:"ul_speed"`
 
-	Context *Speedtest `json:"-"`
-}
-
-type TestDuration struct {
-	Ping     *time.Duration `json:"ping"`
-	Download *time.Duration `json:"download"`
-	Upload   *time.Duration `json:"upload"`
-	Total    *time.Duration `json:"total"`
+	Context *Speedtest
 }
 
 // CustomServer use defaultClient, given a URL string, return a new Server object, with as much
@@ -137,61 +124,18 @@ func (b ByDistance) Less(i, j int) bool {
 	return b.Servers[i].Distance < b.Servers[j].Distance
 }
 
-// FetchServerByID retrieves a server by given serverID.
-func (s *Speedtest) FetchServerByID(serverID string) (*Server, error) {
-	return s.FetchServerByIDContext(context.Background(), serverID)
-}
-
-// FetchServerByID retrieves a server by given serverID.
-func FetchServerByID(serverID string) (*Server, error) {
-	return defaultClient.FetchServerByID(serverID)
-}
-
-// FetchServerByIDContext retrieves a server by given serverID, observing the given context.
-func (s *Speedtest) FetchServerByIDContext(ctx context.Context, serverID string) (*Server, error) {
-	u, err := url.Parse(speedTestServersAdvanced)
-	if err != nil {
-		return nil, err
-	}
-	query := u.Query()
-	query.Set(strings.ToLower("serverID"), serverID)
-	u.RawQuery = query.Encode()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := s.doer.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	var list ServerList
-	decoder := xml.NewDecoder(resp.Body)
-	if err = decoder.Decode(&list); err != nil {
-		return nil, err
-	}
-
-	for i := range list.Servers {
-		if list.Servers[i].ID == serverID {
-			list.Servers[i].Context = s
-			return list.Servers[i], err
-		}
-	}
-	return nil, ErrServerNotFound
+// FetchServers retrieves a list of available servers
+func (s *Speedtest) FetchServers(user *User) (Servers, error) {
+	return s.FetchServerListContext(context.Background(), user)
 }
 
 // FetchServers retrieves a list of available servers
-func (s *Speedtest) FetchServers() (Servers, error) {
-	return s.FetchServerListContext(context.Background())
-}
-
-// FetchServers retrieves a list of available servers
-func FetchServers() (Servers, error) {
-	return defaultClient.FetchServers()
+func FetchServers(user *User) (Servers, error) {
+	return defaultClient.FetchServers(user)
 }
 
 // FetchServerListContext retrieves a list of available servers, observing the given context.
-func (s *Speedtest) FetchServerListContext(ctx context.Context) (Servers, error) {
+func (s *Speedtest) FetchServerListContext(ctx context.Context, user *User) (Servers, error) {
 	u, err := url.Parse(speedTestServersUrl)
 	if err != nil {
 		return Servers{}, err
@@ -216,10 +160,10 @@ func (s *Speedtest) FetchServerListContext(ctx context.Context) (Servers, error)
 		return Servers{}, err
 	}
 
-	payloadType := typeJSONPayload
+	payloadType := JSONPayload
 
 	if resp.ContentLength == 0 {
-		_ = resp.Body.Close()
+		resp.Body.Close()
 
 		req, err = http.NewRequestWithContext(ctx, http.MethodGet, speedTestServersAlternativeUrl, nil)
 		if err != nil {
@@ -231,7 +175,7 @@ func (s *Speedtest) FetchServerListContext(ctx context.Context) (Servers, error)
 			return Servers{}, err
 		}
 
-		payloadType = typeXMLPayload
+		payloadType = XMLPayload
 	}
 
 	defer resp.Body.Close()
@@ -239,14 +183,14 @@ func (s *Speedtest) FetchServerListContext(ctx context.Context) (Servers, error)
 	var servers Servers
 
 	switch payloadType {
-	case typeJSONPayload:
+	case JSONPayload:
 		// Decode xml
 		decoder := json.NewDecoder(resp.Body)
 
 		if err = decoder.Decode(&servers); err != nil {
 			return servers, err
 		}
-	case typeXMLPayload:
+	case XMLPayload:
 		var list ServerList
 		// Decode xml
 		decoder := xml.NewDecoder(resp.Body)
@@ -257,7 +201,7 @@ func (s *Speedtest) FetchServerListContext(ctx context.Context) (Servers, error)
 
 		servers = list.Servers
 	default:
-		return servers, errors.New("response payload decoding not implemented")
+		return servers, fmt.Errorf("response payload decoding not implemented")
 	}
 
 	dbg.Printf("Servers Num: %d\n", len(servers))
@@ -266,9 +210,24 @@ func (s *Speedtest) FetchServerListContext(ctx context.Context) (Servers, error)
 		server.Context = s
 	}
 
-	// ping once
+	// Calculate distance
+	for _, server := range servers {
+		sLat, _ := strconv.ParseFloat(server.Lat, 64)
+		sLon, _ := strconv.ParseFloat(server.Lon, 64)
+		uLat, _ := strconv.ParseFloat(user.Lat, 64)
+		uLon, _ := strconv.ParseFloat(user.Lon, 64)
+		server.Distance = distance(sLat, sLon, uLat, uLon)
+	}
+
+	// Sort by distance
+	sort.Sort(ByDistance{servers})
+
+	if len(servers) <= 0 {
+		return servers, errors.New("unable to retrieve server list")
+	}
+
 	var wg sync.WaitGroup
-	pCtx, fc := context.WithTimeout(context.Background(), time.Second*4)
+	pCtx, fc := context.WithTimeout(context.Background(), time.Second*5)
 	dbg.Println("Echo each server...")
 	for _, server := range servers {
 		wg.Add(1)
@@ -287,35 +246,15 @@ func (s *Speedtest) FetchServerListContext(ctx context.Context) (Servers, error)
 			wg.Done()
 		}(server)
 	}
+
 	wg.Wait()
 	fc()
-
-	// Calculate distance
-	// If we don't call FetchUserInfo() before FetchServers(),
-	// we don't calculate the distance, instead we use the
-	// remote computing distance provided by Ookla as default.
-	if s.User != nil {
-		for _, server := range servers {
-			sLat, _ := strconv.ParseFloat(server.Lat, 64)
-			sLon, _ := strconv.ParseFloat(server.Lon, 64)
-			uLat, _ := strconv.ParseFloat(s.User.Lat, 64)
-			uLon, _ := strconv.ParseFloat(s.User.Lon, 64)
-			server.Distance = distance(sLat, sLon, uLat, uLon)
-		}
-	}
-
-	// Sort by distance
-	sort.Sort(ByDistance{servers})
-
-	if len(servers) <= 0 {
-		return servers, ErrServerNotFound
-	}
 	return servers, nil
 }
 
 // FetchServerListContext retrieves a list of available servers, observing the given context.
-func FetchServerListContext(ctx context.Context) (Servers, error) {
-	return defaultClient.FetchServerListContext(ctx)
+func FetchServerListContext(ctx context.Context, user *User) (Servers, error) {
+	return defaultClient.FetchServerListContext(ctx, user)
 }
 
 func distance(lat1 float64, lon1 float64, lat2 float64, lon2 float64) float64 {
@@ -330,13 +269,12 @@ func distance(lat1 float64, lon1 float64, lat2 float64, lon2 float64) float64 {
 	return radius * math.Acos(x)
 }
 
-// FindServer finds server by serverID in given server list.
-// If the id is not found in the given list, return the server with the lowest latency.
+// FindServer finds server by serverID
 func (servers Servers) FindServer(serverID []int) (Servers, error) {
 	retServer := Servers{}
 
 	if len(servers) <= 0 {
-		return retServer, ErrServerNotFound
+		return retServer, errors.New("no servers available")
 	}
 
 	for _, sid := range serverID {
@@ -386,28 +324,10 @@ func (servers Servers) String() string {
 
 // String representation of Server
 func (s *Server) String() string {
-	if s.Sponsor == "?" {
-		return fmt.Sprintf("[%4s] %s", s.ID, s.Name)
-	}
-	return fmt.Sprintf("[%4s] %.2fkm %s (%s) by %s", s.ID, s.Distance, s.Name, s.Country, s.Sponsor)
+	return fmt.Sprintf("[%4s] %8.2fkm \n%s (%s) by %s\n", s.ID, s.Distance, s.Name, s.Country, s.Sponsor)
 }
 
 // CheckResultValid checks that results are logical given UL and DL speeds
 func (s *Server) CheckResultValid() bool {
 	return !(s.DLSpeed*100 < s.ULSpeed) || !(s.DLSpeed > s.ULSpeed*100)
-}
-
-func (s *Server) testDurationTotalCount() {
-	total := s.getNotNullValue(s.TestDuration.Ping) +
-		s.getNotNullValue(s.TestDuration.Download) +
-		s.getNotNullValue(s.TestDuration.Upload)
-
-	s.TestDuration.Total = &total
-}
-
-func (s *Server) getNotNullValue(time *time.Duration) time.Duration {
-	if time == nil {
-		return 0
-	}
-	return *time
 }
