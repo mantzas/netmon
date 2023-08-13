@@ -40,12 +40,7 @@ func init() {
 func SpeedTest(ctx context.Context, serverIDs []int, pingOnly bool) error {
 	now := time.Now()
 
-	user, err := speedtest.FetchUserInfo()
-	if err != nil {
-		return err
-	}
-
-	servers, err := speedtest.FetchServerListContext(ctx, user)
+	servers, err := speedtest.FetchServerListContext(ctx)
 	if err != nil {
 		return err
 	}
@@ -60,12 +55,12 @@ func SpeedTest(ctx context.Context, serverIDs []int, pingOnly bool) error {
 	for _, server := range servers {
 		serverName := fmt.Sprintf("%s - %s", server.ID, server.Sponsor)
 
-		err := server.PingTestContext(ctx)
+		err := server.PingTestContext(ctx, func(latency time.Duration) {
+			latencyGauge.WithLabelValues(serverName).Set(latency.Seconds())
+		})
 		if err != nil {
 			return fmt.Errorf("speedtest: failed pint test: %w", err)
 		}
-
-		latencyGauge.WithLabelValues(serverName).Set(server.Latency.Seconds())
 
 		if pingOnly {
 			log.Printf("speedtest for host: %s, latency: %s\n", serverName, server.Latency)
