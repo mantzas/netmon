@@ -29,8 +29,8 @@ type Manager interface {
 	CallbackDownloadRate(callback func(downRate float64)) *time.Ticker
 	CallbackUploadRate(callback func(upRate float64)) *time.Ticker
 
-	RegisterDownloadHandler(fn func()) *funcGroup
-	RegisterUploadHandler(fn func()) *funcGroup
+	RegisterDownloadHandler(fn func()) *FuncGroup
+	RegisterUploadHandler(fn func()) *FuncGroup
 
 	// Wait for the upload or download task to end to avoid errors caused by core occupation
 	Wait()
@@ -54,16 +54,16 @@ const readChunkSize = 1024 * 32 // 32 KBytes
 
 type DataType int32
 
-const typeEmptyChunk = 0
-const typeDownload = 1
-const typeUpload = 2
+const TypeEmptyChunk = 0
+const TypeDownload = 1
+const TypeUpload = 2
 
-type funcGroup struct {
+type FuncGroup struct {
 	fns     []func()
 	manager *DataManager
 }
 
-func (f *funcGroup) Add(fn func()) {
+func (f *FuncGroup) Add(fn func()) {
 	f.fns = append(f.fns, fn)
 }
 
@@ -85,8 +85,8 @@ type DataManager struct {
 
 	running bool
 
-	dFn *funcGroup
-	uFn *funcGroup
+	dFn *FuncGroup
+	uFn *FuncGroup
 }
 
 func NewDataManager() *DataManager {
@@ -95,17 +95,22 @@ func NewDataManager() *DataManager {
 		captureTime:          time.Second * 10,
 		rateCaptureFrequency: time.Millisecond * 100,
 	}
-	ret.dFn = &funcGroup{manager: ret}
-	ret.uFn = &funcGroup{manager: ret}
+	ret.dFn = &FuncGroup{manager: ret}
+	ret.uFn = &FuncGroup{manager: ret}
 	return ret
 }
 
 func (dm *DataManager) CallbackDownloadRate(callback func(downRate float64)) *time.Ticker {
 	ticker := time.NewTicker(dm.rateCaptureFrequency)
+	oldDownTotal := dm.GetTotalDownload()
+	unit := float64(time.Second / dm.rateCaptureFrequency)
+
 	go func() {
-		sTime := time.Now()
 		for range ticker.C {
-			callback((float64(dm.GetTotalDownload()) * 8 / 1000000) / float64(time.Since(sTime).Milliseconds()) * 1000)
+			newDownTotal := dm.GetTotalDownload()
+			delta := newDownTotal - oldDownTotal
+			oldDownTotal = newDownTotal
+			callback(float64(delta) * 8 / 1000000 * unit)
 		}
 	}()
 	return ticker
@@ -113,10 +118,15 @@ func (dm *DataManager) CallbackDownloadRate(callback func(downRate float64)) *ti
 
 func (dm *DataManager) CallbackUploadRate(callback func(upRate float64)) *time.Ticker {
 	ticker := time.NewTicker(dm.rateCaptureFrequency)
+	oldUpTotal := dm.GetTotalUpload()
+	unit := float64(time.Second / dm.rateCaptureFrequency)
+
 	go func() {
-		sTime := time.Now()
 		for range ticker.C {
-			callback((float64(dm.GetTotalUpload()) * 8 / 1000000) / float64(time.Since(sTime).Milliseconds()) * 1000)
+			newUpTotal := dm.GetTotalUpload()
+			delta := newUpTotal - oldUpTotal
+			oldUpTotal = newUpTotal
+			callback(float64(delta) * 8 / 1000000 * unit)
 		}
 	}()
 	return ticker
@@ -139,21 +149,21 @@ func (dm *DataManager) Wait() {
 	}
 }
 
-func (dm *DataManager) RegisterUploadHandler(fn func()) *funcGroup {
+func (dm *DataManager) RegisterUploadHandler(fn func()) *FuncGroup {
 	if len(dm.uFn.fns) < dm.nThread {
 		dm.uFn.Add(fn)
 	}
 	return dm.uFn
 }
 
-func (dm *DataManager) RegisterDownloadHandler(fn func()) *funcGroup {
+func (dm *DataManager) RegisterDownloadHandler(fn func()) *FuncGroup {
 	if len(dm.dFn.fns) < dm.nThread {
 		dm.dFn.Add(fn)
 	}
 	return dm.dFn
 }
 
-func (f *funcGroup) Start(cancel context.CancelFunc, mainRequestHandlerIndex int) {
+func (f *FuncGroup) Start(cancel context.CancelFunc, mainRequestHandlerIndex int) {
 	if len(f.fns) == 0 {
 		panic("empty task stack")
 	}
@@ -329,9 +339,9 @@ func (dc *DataChunk) GetDuration() time.Duration {
 }
 
 func (dc *DataChunk) GetRate() float64 {
-	if dc.dateType == typeDownload {
+	if dc.dateType == TypeDownload {
 		return float64(dc.remainOrDiscardSize) / dc.GetDuration().Seconds()
-	} else if dc.dateType == typeUpload {
+	} else if dc.dateType == TypeUpload {
 		return float64(dc.ContentLength-dc.remainOrDiscardSize) * 8 / 1000 / 1000 / dc.GetDuration().Seconds()
 	}
 	return 0
@@ -340,17 +350,16 @@ func (dc *DataChunk) GetRate() float64 {
 // DownloadHandler No value will be returned here, because the error will interrupt the test.
 // The error chunk is generally caused by the remote server actively closing the connection.
 func (dc *DataChunk) DownloadHandler(r io.Reader) error {
-	if dc.dateType != typeEmptyChunk {
+	if dc.dateType != TypeEmptyChunk {
 		dc.err = errors.New("multiple calls to the same chunk handler are not allowed")
 		return dc.err
 	}
-	dc.dateType = typeDownload
+	dc.dateType = TypeDownload
 	dc.startTime = time.Now()
 	defer func() {
 		dc.endTime = time.Now()
 	}()
 	bufP := blackHolePool.Get().(*[]byte)
-	defer blackHolePool.Put(bufP)
 	readSize := 0
 	for {
 		if !dc.manager.running {
@@ -362,6 +371,7 @@ func (dc *DataChunk) DownloadHandler(r io.Reader) error {
 		dc.remainOrDiscardSize += rs
 		atomic.AddInt64(&dc.manager.totalDownload, rs)
 		if dc.err != nil {
+			blackHolePool.Put(bufP)
 			if dc.err == io.EOF {
 				return nil
 			}
@@ -371,7 +381,7 @@ func (dc *DataChunk) DownloadHandler(r io.Reader) error {
 }
 
 func (dc *DataChunk) UploadHandler(size int64) Chunk {
-	if dc.dateType != typeEmptyChunk {
+	if dc.dateType != TypeEmptyChunk {
 		dc.err = errors.New("multiple calls to the same chunk handler are not allowed")
 	}
 
@@ -381,7 +391,7 @@ func (dc *DataChunk) UploadHandler(size int64) Chunk {
 
 	dc.ContentLength = size
 	dc.remainOrDiscardSize = size
-	dc.dateType = typeUpload
+	dc.dateType = TypeUpload
 
 	if dc.manager.repeatByte == nil {
 		r := bytes.Repeat([]byte{0xAA}, readChunkSize) // uniformly distributed sequence of bits
