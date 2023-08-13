@@ -5,7 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -22,7 +22,7 @@ import (
 func main() {
 	err := run()
 	if err != nil {
-		log.Fatalln(err)
+		slog.Error("failed to run", "err", err)
 	}
 }
 
@@ -32,7 +32,7 @@ func run() error {
 		return err
 	}
 
-	log.Printf("starting monitoring: %v", cfg)
+	slog.Info("start monitoring", "cfg", cfg)
 
 	ctx, cnl := context.WithCancel(context.Background())
 	defer cnl()
@@ -56,7 +56,7 @@ func run() error {
 		defer wg.Done()
 		err = srv.ListenAndServe()
 		if !errors.Is(err, http.ErrServerClosed) {
-			log.Printf("failed to run HTTP listener: %v", err)
+			slog.Error("failed to run HTTP listener", "err", err)
 		}
 	}()
 
@@ -68,11 +68,11 @@ func run() error {
 	}()
 
 	sig := <-chSignal
-	log.Printf("signal %v received\n", sig)
+	slog.Info("signal received", "sig", sig)
 
 	err = srv.Close()
 	if err != nil {
-		log.Printf("failed to close HTTP listener: %v", err)
+		slog.Info("failed to close HTTP listener", "err", err)
 	}
 
 	cnl()
@@ -95,7 +95,7 @@ func process(ctx context.Context, pingInterval, speedInterval time.Duration, ser
 			pingTicker.Stop()
 			err := netmon.SpeedTest(ctx, serverIDs, true)
 			if err != nil {
-				log.Println(err)
+				slog.ErrorContext(ctx, "speed test (ping only) failed", "err", err)
 			}
 			pingTicker.Reset(pingInterval)
 
@@ -103,7 +103,7 @@ func process(ctx context.Context, pingInterval, speedInterval time.Duration, ser
 			speedTicker.Stop()
 			err := netmon.SpeedTest(ctx, serverIDs, false)
 			if err != nil {
-				log.Println(err)
+				slog.ErrorContext(ctx, "speed test failed", "err", err)
 			}
 			speedTicker.Reset(speedInterval)
 		}
