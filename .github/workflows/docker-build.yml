@@ -43,7 +43,7 @@ jobs:
   deploy:
     name: Deploy to local k8s
     runs-on: self-hosted
+    needs: publish
     steps:
       - name: Check out source code
         run: echo "Deploying"
-              
