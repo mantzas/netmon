@@ -10,7 +10,7 @@ env:
 jobs:
   publish:
     name: Publish docker image to registry
-    runs-on: self-hosted
+    runs-on: ubuntu-latest
     steps:
       - name: Check out source code
         uses: actions/checkout@v3
