@@ -176,9 +176,10 @@ func (f *funcGroup) Start(cancel context.CancelFunc, mainRequestHandlerIndex int
 	dbg.Printf("auxN: %d\n", auxN)
 	wg := sync.WaitGroup{}
 	f.manager.running = true
-	ticker := f.manager.rateCapture()
+	stopCapture := f.manager.rateCapture()
 	time.AfterFunc(f.manager.captureTime, func() {
-		ticker.Stop()
+		stopCapture <- true
+		close(stopCapture)
 		f.manager.running = false
 		cancel()
 		dbg.Println("FuncGroup: Stop")
@@ -220,27 +221,36 @@ func (f *funcGroup) Start(cancel context.CancelFunc, mainRequestHandlerIndex int
 	wg.Wait()
 }
 
-func (dm *DataManager) rateCapture() *time.Ticker {
+func (dm *DataManager) rateCapture() chan bool {
 	ticker := time.NewTicker(dm.rateCaptureFrequency)
 	oldTotalDownload := dm.totalDownload
 	oldTotalUpload := dm.totalUpload
-	go func() {
-		for range ticker.C {
-			newTotalDownload := dm.totalDownload
-			newTotalUpload := dm.totalUpload
-			deltaDownload := newTotalDownload - oldTotalDownload
-			deltaUpload := newTotalUpload - oldTotalUpload
-			oldTotalDownload = newTotalDownload
-			oldTotalUpload = newTotalUpload
-			if deltaDownload != 0 {
-				dm.DownloadRateSequence = append(dm.DownloadRateSequence, deltaDownload)
-			}
-			if deltaUpload != 0 {
-				dm.UploadRateSequence = append(dm.UploadRateSequence, deltaUpload)
+	stopCapture := make(chan bool)
+	go func(t *time.Ticker) {
+		defer t.Stop()
+		for {
+			select {
+			case <-t.C:
+				newTotalDownload := dm.totalDownload
+				newTotalUpload := dm.totalUpload
+				deltaDownload := newTotalDownload - oldTotalDownload
+				deltaUpload := newTotalUpload - oldTotalUpload
+				oldTotalDownload = newTotalDownload
+				oldTotalUpload = newTotalUpload
+				if deltaDownload != 0 {
+					dm.DownloadRateSequence = append(dm.DownloadRateSequence, deltaDownload)
+				}
+				if deltaUpload != 0 {
+					dm.UploadRateSequence = append(dm.UploadRateSequence, deltaUpload)
+				}
+			case stop := <-stopCapture:
+				if stop {
+					return
+				}
 			}
 		}
-	}()
-	return ticker
+	}(ticker)
+	return stopCapture
 }
 
 func (dm *DataManager) NewChunk() Chunk {
