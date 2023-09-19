@@ -4,7 +4,7 @@ go 1.21
 
 require (
 	github.com/prometheus/client_golang v1.16.0
-	github.com/showwin/speedtest-go v1.6.3
+	github.com/showwin/speedtest-go v1.6.6
 )
 
 require (
