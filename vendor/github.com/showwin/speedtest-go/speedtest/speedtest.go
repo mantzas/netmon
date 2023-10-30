@@ -11,8 +11,16 @@ import (
 )
 
 var (
-	version          = "1.6.6"
+	version          = "1.6.7"
 	DefaultUserAgent = fmt.Sprintf("showwin/speedtest-go %s", version)
+)
+
+type Proto int
+
+const (
+	ICMP Proto = iota
+	TCP
+	HTTP
 )
 
 // Speedtest is a speedtest client.
@@ -32,7 +40,7 @@ type UserConfig struct {
 	Proxy     string
 	Source    string
 	Debug     bool
-	ICMP      bool
+	PingMode  Proto
 
 	SavingMode bool
 
@@ -159,7 +167,7 @@ func WithUserConfig(userConfig *UserConfig) Option {
 		dbg.Printf("Proxy: %s\n", s.config.Proxy)
 		dbg.Printf("SavingMode: %v\n", s.config.SavingMode)
 		dbg.Printf("Keyword: %v\n", s.config.Keyword)
-		dbg.Printf("ICMP: %v\n", s.config.ICMP)
+		dbg.Printf("PingType: %v\n", s.config.PingMode)
 		dbg.Printf("OS: %s, ARCH: %s, NumCPU: %d\n", runtime.GOOS, runtime.GOARCH, runtime.NumCPU())
 	}
 }
@@ -168,7 +176,7 @@ func WithUserConfig(userConfig *UserConfig) Option {
 func New(opts ...Option) *Speedtest {
 	s := &Speedtest{
 		doer:    http.DefaultClient,
-		Manager: GlobalDataManager,
+		Manager: NewDataManager(),
 	}
 	// load default config
 	s.NewUserConfig(&UserConfig{UserAgent: DefaultUserAgent})
