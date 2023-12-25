@@ -59,7 +59,7 @@ func SpeedTest(ctx context.Context, serverIDs []int, pingOnly bool) error {
 			latencyGauge.WithLabelValues(serverName).Set(latency.Seconds())
 		})
 		if err != nil {
-			return fmt.Errorf("speedtest: failed pint test: %w", err)
+			return fmt.Errorf("speedtest: failed ping test on %s: %w", serverName, err)
 		}
 
 		if pingOnly {
