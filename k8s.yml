@@ -14,12 +14,14 @@ spec:
       labels:
         app: netmon
     spec:
-      containers:
+      containers:      
       - name: netmon
         image: ghcr.io/mantzas/netmon:latest
         ports:
-        - containerPort: 8092
+        - containerPort: 80
         env:
+        - name: HTTP_PORT
+          value: "80"
         - name: SPEED_SERVER_IDS
           value: "5188"
 ---
@@ -33,5 +35,5 @@ spec:
   ports:
     - protocol: TCP
       port: 80
-      targetPort: 8092
+      targetPort: 80
   type: LoadBalancer
