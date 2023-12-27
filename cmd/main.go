@@ -119,7 +119,7 @@ func createHTTPServer(port int) *http.Server {
 		ReadTimeout:       30 * time.Second,
 		ReadHeaderTimeout: 10 * time.Second,
 		WriteTimeout:      60 * time.Second,
-		IdleTimeout:       240 * time.Second,
+		IdleTimeout:       120 * time.Second,
 		Handler:           http.TimeoutHandler(mux, 59*time.Second, ""),
 	}
 }

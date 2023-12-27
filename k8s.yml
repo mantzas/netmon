@@ -12,10 +12,7 @@ spec:
   template:
     metadata:
       labels:
-        app: netmon
-      annotations:
-        prometheus.io/scrape: "true"
-        prometheus.io/port: "80"        
+        app: netmon      
     spec:
       containers:      
       - name: netmon
@@ -32,6 +29,10 @@ apiVersion: v1
 kind: Service
 metadata:
   name: netmon-service
+  annotations:
+        k8s.grafana.com/metrics.path:	"/metrics"
+        k8s.grafana.com/metrics.portNumber: "80"
+        k8s.grafana.com/scrape: "true"
 spec:
   selector:
     app: netmon
