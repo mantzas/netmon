@@ -14,7 +14,7 @@ spec:
       labels:
         app: netmon      
     spec:
-      containers:      
+      containers:
       - name: netmon
         image: ghcr.io/mantzas/netmon:latest
         ports:
@@ -24,6 +24,10 @@ spec:
           value: "80"
         - name: SPEED_SERVER_IDS
           value: "5188"
+        resources:
+          limits:
+            cpu: "1"
+            memory: "1024Mi"
 ---
 apiVersion: v1
 kind: Service
