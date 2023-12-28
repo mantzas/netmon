@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -11,7 +12,6 @@ import (
 	"os/signal"
 	"strconv"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 
@@ -27,92 +27,56 @@ func main() {
 }
 
 func run() error {
-	cfg, err := configFromEnv()
+	servers, err := getServerIDs()
 	if err != nil {
 		return err
 	}
 
-	slog.Info("start monitoring", "cfg", cfg)
+	port, err := getPort()
+	if err != nil {
+		return err
+	}
 
-	ctx, cnl := context.WithCancel(context.Background())
-	defer cnl()
+	slog.Info("start monitoring", "port", port, "servers", servers)
 
 	chSignal := make(chan os.Signal, 1)
 	signal.Notify(chSignal, os.Interrupt, syscall.SIGTERM)
 
-	// Get the first measurements.
-	err = netmon.SpeedTest(ctx, cfg.serverIDs, false)
-	if err != nil {
-		return err
-	}
-
-	srv := createHTTPServer(cfg.httpPort)
-
-	wg := sync.WaitGroup{}
-
-	wg.Add(1)
+	srv := createHTTPServer(port, servers)
 
 	go func() {
-		defer wg.Done()
 		err = srv.ListenAndServe()
 		if !errors.Is(err, http.ErrServerClosed) {
 			slog.Error("failed to run HTTP listener", "err", err)
+			os.Exit(1)
 		}
-	}()
-
-	wg.Add(1)
-
-	go func() {
-		defer wg.Done()
-		process(ctx, cfg.pingInterval, cfg.speedInterval, cfg.serverIDs)
 	}()
 
 	sig := <-chSignal
 	slog.Info("signal received", "sig", sig)
 
-	err = srv.Close()
-	if err != nil {
-		slog.Info("failed to close HTTP listener", "err", err)
-	}
+	ctx, cnl := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cnl()
 
-	cnl()
-	wg.Wait()
+	err = srv.Shutdown(ctx)
+	if err != nil {
+		slog.Info("failed to shutdown server", "err", err)
+	}
 
 	return err
 }
 
-func process(ctx context.Context, pingInterval, speedInterval time.Duration, serverIDs []int) {
-	pingTicker := time.NewTicker(pingInterval)
-	speedTicker := time.NewTicker(speedInterval)
-
-	for {
-		select {
-		case <-ctx.Done():
-			pingTicker.Stop()
-			speedTicker.Stop()
-			return
-		case <-pingTicker.C:
-			pingTicker.Stop()
-			err := netmon.SpeedTest(ctx, serverIDs, true)
-			if err != nil {
-				slog.ErrorContext(ctx, "speed test (ping only) failed", "err", err)
-			}
-			pingTicker.Reset(pingInterval)
-
-		case <-speedTicker.C:
-			speedTicker.Stop()
-			err := netmon.SpeedTest(ctx, serverIDs, false)
-			if err != nil {
-				slog.ErrorContext(ctx, "speed test failed", "err", err)
-			}
-			speedTicker.Reset(speedInterval)
-		}
-	}
-}
-
-func createHTTPServer(port int) *http.Server {
+func createHTTPServer(port int, servers []string) *http.Server {
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", promhttp.Handler())
+	mux.HandleFunc("/health", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	mux.HandleFunc("/ready", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	mux.HandleFunc("/api/v1/ping", pingHandler)
+	mux.HandleFunc("/api/v1/speed", speedHandlerFunc(servers))
 
 	return &http.Server{
 		Addr:              fmt.Sprintf(":%d", port),
@@ -124,79 +88,67 @@ func createHTTPServer(port int) *http.Server {
 	}
 }
 
-type config struct {
-	httpPort      int
-	serverIDs     []int
-	pingInterval  time.Duration
-	speedInterval time.Duration
+func pingHandler(w http.ResponseWriter, r *http.Request) {
+	results, err := netmon.Ping(r.Context())
+	if err != nil {
+		slog.ErrorContext(r.Context(), "ping failed", "err", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	response, err := json.Marshal(results)
+	if err != nil {
+		slog.ErrorContext(r.Context(), "failed to marshal results to JSON", "err", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write(response)
 }
 
-func (c config) String() string {
-	return fmt.Sprintf("port: %d server ids: %v ping interval: %v speed interval: %v", c.httpPort, c.serverIDs, c.pingInterval, c.speedInterval)
+func speedHandlerFunc(serverIds []string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		results := netmon.Speed(r.Context(), serverIds)
+
+		response, err := json.Marshal(results)
+		if err != nil {
+			slog.ErrorContext(r.Context(), "failed to marshal results to JSON", "err", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write(response)
+	}
 }
 
-func configFromEnv() (config, error) {
-	cfg := config{}
-
-	httpPort, err := getEnv("HTTP_PORT", "8092")
-	if err != nil {
-		return cfg, err
-	}
-
-	cfg.httpPort, err = strconv.Atoi(httpPort)
-	if err != nil {
-		return cfg, err
-	}
-
-	cfg.pingInterval, err = getInterval("PING_INTERVAL_SECONDS", "60")
-	if err != nil {
-		return config{}, err
-	}
-
-	cfg.speedInterval, err = getInterval("SPEED_INTERVAL_SECONDS", "3600")
-	if err != nil {
-		return config{}, err
-	}
-
-	cfg.serverIDs, err = getServerIDs()
-	if err != nil {
-		return config{}, err
-	}
-
-	return cfg, nil
-}
-
-func getInterval(envVar, defaultValue string) (time.Duration, error) {
-	var err error
-
-	secVal, err := getEnv(envVar, defaultValue)
+func getPort() (int, error) {
+	port, err := getEnv("HTTP_PORT", "8092")
 	if err != nil {
 		return 0, err
 	}
 
-	seconds, err := strconv.Atoi(secVal)
+	portInt, err := strconv.Atoi(port)
 	if err != nil {
-		return 0, fmt.Errorf("failed to convert ping interval: %v", err)
+		return 0, fmt.Errorf("failed to convert port: %v", err)
 	}
 
-	return time.Duration(seconds) * time.Second, nil
+	return portInt, nil
 }
 
-func getServerIDs() ([]int, error) {
-	serverIDs := make([]int, 0)
-
+func getServerIDs() ([]string, error) {
 	ids, err := getEnv("SPEED_SERVER_IDS", "")
 	if err != nil {
 		return nil, err
 	}
 
-	for _, id := range strings.Split(ids, ",") {
-		serverID, err := strconv.Atoi(id)
-		if err != nil {
-			return nil, fmt.Errorf("failed to convert server id [%s]: %v", id, err)
-		}
+	serverIDs := strings.Split(ids, ",")
 
-		serverIDs = append(serverIDs, serverID)
+	if len(serverIDs) == 0 {
+		return nil, fmt.Errorf("no valid server ids provided in the env var")
 	}
 
 	return serverIDs, nil
