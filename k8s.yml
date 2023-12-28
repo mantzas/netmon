@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: netmon
-        image: ghcr.io/mantzas/netmon:latest
+        image: ghcr.io/mantzas/netmon:0.4.1
         ports:
         - containerPort: 80
         env:
