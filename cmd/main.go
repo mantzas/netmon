@@ -105,7 +105,12 @@ func pingHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	w.Write(response)
+	_, err = w.Write(response)
+	if err != nil {
+		slog.ErrorContext(r.Context(), "failed to write response", "err", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 }
 
 func speedHandlerFunc(serverIds []string) http.HandlerFunc {
@@ -121,7 +126,12 @@ func speedHandlerFunc(serverIds []string) http.HandlerFunc {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write(response)
+		_, err = w.Write(response)
+		if err != nil {
+			slog.ErrorContext(r.Context(), "failed to write response", "err", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 	}
 }
 

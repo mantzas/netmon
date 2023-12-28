@@ -53,7 +53,7 @@ func Ping(ctx context.Context) ([]PingResult, error) {
 		return nil, err
 	}
 
-	var results []PingResult
+	results := make([]PingResult, 0, len(servers))
 
 	for _, server := range servers {
 		result := PingResult{
@@ -88,7 +88,7 @@ type SpeedResult struct {
 func Speed(ctx context.Context, serverIDs []string) []SpeedResult {
 	now := time.Now()
 
-	var results []SpeedResult
+	results := make([]SpeedResult, 0, len(serverIDs))
 
 	for _, serverID := range serverIDs {
 		result := SpeedResult{
