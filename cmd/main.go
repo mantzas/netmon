@@ -88,6 +88,10 @@ func createHTTPServer(port int, servers []string) *http.Server {
 	}
 }
 
+type pingResponse struct {
+	Results []netmon.PingResult `json:"results"`
+}
+
 func pingHandler(w http.ResponseWriter, r *http.Request) {
 	results, err := netmon.Ping(r.Context())
 	if err != nil {
@@ -96,7 +100,7 @@ func pingHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	response, err := json.Marshal(results)
+	response, err := json.Marshal(pingResponse{Results: results})
 	if err != nil {
 		slog.ErrorContext(r.Context(), "failed to marshal results to JSON", "err", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -113,11 +117,15 @@ func pingHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+type speedResponse struct {
+	Results []netmon.SpeedResult `json:"results"`
+}
+
 func speedHandlerFunc(serverIds []string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		results := netmon.Speed(r.Context(), serverIds)
 
-		response, err := json.Marshal(results)
+		response, err := json.Marshal(speedResponse{Results: results})
 		if err != nil {
 			slog.ErrorContext(r.Context(), "failed to marshal results to JSON", "err", err)
 			w.WriteHeader(http.StatusInternalServerError)
