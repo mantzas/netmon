@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: netmon
-        image: ghcr.io/mantzas/netmon:0.4.1
+        image: ghcr.io/mantzas/netmon:latest
         ports:
         - containerPort: 80
         env:
@@ -57,41 +57,3 @@ spec:
       port: 80
       targetPort: 80
   type: LoadBalancer
----
-apiVersion: batch/v1
-kind: CronJob
-metadata:
-  name: netmon-cronjob-speed
-spec:
-  schedule: "0 */1 * * *"
-  concurrencyPolicy: Forbid
-  jobTemplate:
-    spec:
-      template:
-        spec:
-          containers:
-          - name: netmon-cronjob-speed
-            image: curlimages/curl:latest
-            imagePullPolicy: IfNotPresent
-            command: ["curl"]
-            args: ["netmon-service.default.svc.cluster.local:80/api/v1/speed"]
-          restartPolicy: OnFailure
----
-apiVersion: batch/v1
-kind: CronJob
-metadata:
-  name: netmon-cronjob-ping
-spec:
-  schedule: "*/1 * * * *"
-  concurrencyPolicy: Forbid
-  jobTemplate:
-    spec:
-      template:
-        spec:
-          containers:
-          - name: netmon-cronjob-ping
-            image: curlimages/curl:latest
-            imagePullPolicy: IfNotPresent
-            command: ["curl"]
-            args: ["netmon-service.default.svc.cluster.local:80/api/v1/ping"]
-          restartPolicy: OnFailure          
