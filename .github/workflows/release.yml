@@ -41,13 +41,9 @@ jobs:
           tags: "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest,${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.RELEASE_VERSION }}"
           build-args: GH_TOKEN=${{ secrets.MANTZAS_GH_TOKEN }}
 
-  deploy:
-    name: Deploy to local k8s
-    runs-on: self-hosted
-    needs: publish
-    steps:
-      - name: Check out source code
-        uses: actions/checkout@v4
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        id: install
 
       - name: Set up kubectl
         uses: azure/k8s-set-context@v1
