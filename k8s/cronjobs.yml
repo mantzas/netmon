@@ -13,7 +13,7 @@ spec:
         spec:
           containers:
             - name: netmon-cronjob-speed
-              image: curlimages/curl:latest
+              image: curlimages/curl:8.5.0
               imagePullPolicy: IfNotPresent
               command: ["curl"]
               args: ["netmon-service.netmon.svc.cluster.local:80/api/v1/speed"]
@@ -34,7 +34,7 @@ spec:
         spec:
           containers:
             - name: netmon-cronjob-ping
-              image: curlimages/curl:latest
+              image: curlimages/curl:8.5.0
               imagePullPolicy: IfNotPresent
               command: ["curl"]
               args: ["netmon-service.netmon.svc.cluster.local:80/api/v1/ping"]
