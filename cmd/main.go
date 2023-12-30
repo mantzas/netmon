@@ -109,7 +109,8 @@ func createHTTPServer(port int, servers []string) *http.Server {
 	mux := http.NewServeMux()
 	handleFunc := func(pattern string, hd func(http.ResponseWriter, *http.Request)) {
 		handler := otelhttp.WithRouteTag(pattern, http.HandlerFunc(hd))
-		mux.Handle(pattern, handler)
+		otelHandler := otelhttp.NewHandler(handler, pattern)
+		mux.Handle(pattern, otelHandler)
 	}
 
 	mux.Handle("/metrics", promhttp.Handler())
@@ -122,8 +123,6 @@ func createHTTPServer(port int, servers []string) *http.Server {
 
 	handleFunc("/api/v1/ping", pingHandler)
 	handleFunc("/api/v1/speed", speedHandlerFunc(servers))
-	// Add HTTP instrumentation for the whole server.
-	otelHandler := otelhttp.NewHandler(mux, "/")
 
 	return &http.Server{
 		Addr:              fmt.Sprintf(":%d", port),
@@ -131,7 +130,7 @@ func createHTTPServer(port int, servers []string) *http.Server {
 		ReadHeaderTimeout: 10 * time.Second,
 		WriteTimeout:      60 * time.Second,
 		IdleTimeout:       120 * time.Second,
-		Handler:           http.TimeoutHandler(otelHandler, 59*time.Second, ""),
+		Handler:           http.TimeoutHandler(mux, 59*time.Second, ""),
 	}
 }
 
