@@ -19,11 +19,19 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
 	"go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.21.0"
+)
+
+const (
+	NETMON_HTTP_PORT                  = "NETMON_HTTP_PORT"
+	NETMON_HTTP_DEFAULT_PORT          = "8092"
+	NETMON_OTLP_GRPC_ENDPOINT         = "NETMON_OTEL_EXPORTER_OTLP_GRPC_ENDPOINT"
+	NETMON_OTLP_GRPC_DEFAULT_ENDPOINT = "localhost:4317"
+	NETMON_SPEED_SERVER_IDS           = "NETMON_SPEED_SERVER_IDS"
 )
 
 var (
@@ -49,12 +57,17 @@ func run() error {
 		return err
 	}
 
+	gRPCEndpoint, err := getGRPCEndpoint()
+	if err != nil {
+		return err
+	}
+
 	slog.Info("start monitoring", "port", port, "servers", servers)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	otelShutdown, err := setupOTelSDK(ctx, serviceName, serviceVersion)
+	otelShutdown, err := setupOTelSDK(ctx, serviceName, serviceVersion, gRPCEndpoint)
 	if err != nil {
 		return err
 	}
@@ -178,7 +191,7 @@ func speedHandlerFunc(serverIds []string) http.HandlerFunc {
 }
 
 func getPort() (int, error) {
-	port, err := getEnv("HTTP_PORT", "8092")
+	port, err := getEnv(NETMON_HTTP_PORT, NETMON_HTTP_DEFAULT_PORT)
 	if err != nil {
 		return 0, err
 	}
@@ -191,8 +204,12 @@ func getPort() (int, error) {
 	return portInt, nil
 }
 
+func getGRPCEndpoint() (string, error) {
+	return getEnv(NETMON_OTLP_GRPC_ENDPOINT, NETMON_OTLP_GRPC_DEFAULT_ENDPOINT)
+}
+
 func getServerIDs() ([]string, error) {
-	ids, err := getEnv("SPEED_SERVER_IDS", "")
+	ids, err := getEnv(NETMON_SPEED_SERVER_IDS, "")
 	if err != nil {
 		return nil, err
 	}
@@ -223,7 +240,7 @@ func getEnv(key string, def string) (string, error) {
 	return "", fmt.Errorf("env var %s does not exist and no default value is set", key)
 }
 
-func setupOTelSDK(ctx context.Context, serviceName, serviceVersion string) (shutdown func(context.Context) error, err error) {
+func setupOTelSDK(ctx context.Context, serviceName, serviceVersion, gRPCEndpoint string) (shutdown func(context.Context) error, err error) {
 	var shutdownFuncs []func(context.Context) error
 
 	// shutdown calls cleanup functions registered via shutdownFuncs.
@@ -255,7 +272,7 @@ func setupOTelSDK(ctx context.Context, serviceName, serviceVersion string) (shut
 	otel.SetTextMapPropagator(prop)
 
 	// Set up trace provider.
-	tracerProvider, err := newTraceProvider(res)
+	tracerProvider, err := newTraceProvider(ctx, gRPCEndpoint, res)
 	if err != nil {
 		handleErr(err)
 		return
@@ -281,9 +298,9 @@ func newPropagator() propagation.TextMapPropagator {
 	)
 }
 
-func newTraceProvider(res *resource.Resource) (*trace.TracerProvider, error) {
-	traceExporter, err := stdouttrace.New(
-		stdouttrace.WithPrettyPrint())
+func newTraceProvider(ctx context.Context, endpoint string, res *resource.Resource) (*trace.TracerProvider, error) {
+	traceExporter, err := otlptracegrpc.New(ctx, otlptracegrpc.WithEndpoint(endpoint), otlptracegrpc.WithInsecure(),
+		otlptracegrpc.WithTimeout(5*time.Second))
 	if err != nil {
 		return nil, err
 	}
