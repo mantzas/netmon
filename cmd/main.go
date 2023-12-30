@@ -299,16 +299,19 @@ func newPropagator() propagation.TextMapPropagator {
 }
 
 func newTraceProvider(ctx context.Context, endpoint string, res *resource.Resource) (*trace.TracerProvider, error) {
-	traceExporter, err := otlptracegrpc.New(ctx, otlptracegrpc.WithEndpoint(endpoint), otlptracegrpc.WithInsecure(),
-		otlptracegrpc.WithTimeout(5*time.Second))
+	options := []otlptracegrpc.Option{
+		otlptracegrpc.WithEndpoint(endpoint),
+		otlptracegrpc.WithInsecure(),
+		otlptracegrpc.WithTimeout(5 * time.Second),
+	}
+
+	traceExporter, err := otlptracegrpc.New(ctx, options...)
 	if err != nil {
 		return nil, err
 	}
 
 	traceProvider := trace.NewTracerProvider(
-		trace.WithBatcher(traceExporter,
-			// Default is 5s. Set to 1s for demonstrative purposes.
-			trace.WithBatchTimeout(time.Second)),
+		trace.WithBatcher(traceExporter, trace.WithBatchTimeout(5*time.Second)),
 		trace.WithResource(res),
 		trace.WithSampler(trace.AlwaysSample()),
 	)
