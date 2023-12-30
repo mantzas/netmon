@@ -56,7 +56,7 @@ jobs:
         uses: azure/k8s-deploy@v1
         with:
           manifests: |
-            k8s/deployment_service.yaml            
+            ./k8s/deployment_service.yaml            
           images: |
             ghcr.io/mantzas/netmon:${{ env.RELEASE_VERSION }}
           imagepullsecrets: |
@@ -67,6 +67,6 @@ jobs:
         uses: azure/k8s-deploy@v1
         with:
           manifests: |
-            k8s/cronjobs.yaml
+            ./k8s/cronjobs.yaml
           namespace: netmon
           
