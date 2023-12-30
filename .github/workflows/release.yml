@@ -47,4 +47,30 @@ jobs:
     needs: publish
     steps:
       - name: Check out source code
-        run: echo "Deploying"
+        uses: actions/checkout@v4
+
+      - name: Set up kubectl
+        uses: azure/k8s-set-context@v1
+        with:
+          method: kubeconfig
+          kubeconfig: ${{ secrets.LOCALK8S_KUBECONFIG }}          
+        id: setcontext
+
+      - name: Deploy service
+        uses: azure/k8s-deploy@v1
+        with:
+          manifests: |
+            k8s/deployment_service.yaml            
+          images: |
+            ghcr.io/mantzas/netmon:${{ env.RELEASE_VERSION }}
+          imagepullsecrets: |
+            ${{ secrets.MANTZAS_GH_TOKEN }}
+          namespace: netmon
+
+      - name: Deploy cronjobs
+        uses: azure/k8s-deploy@v1
+        with:
+          manifests: |
+            k8s/cronjobs.yaml
+          namespace: netmon
+          
