@@ -24,7 +24,7 @@ spec:
           value: "80"
         - name: NETMON_SPEED_SERVER_IDS
           value: "5188"
-        - name: NETMON__OTLP_GRPC_ENDPOINT
+        - name: NETMON_OTLP_GRPC_ENDPOINT
           value: "grafana-k8s-monitoring-grafana-agent.observability.svc.cluster.local:4317"
         resources:
           limits:

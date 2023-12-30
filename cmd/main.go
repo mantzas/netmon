@@ -27,11 +27,11 @@ import (
 )
 
 const (
-	NETMON_HTTP_PORT                  = "NETMON_HTTP_PORT"
-	NETMON_HTTP_DEFAULT_PORT          = "8092"
-	NETMON_OTLP_GRPC_ENDPOINT         = "NETMON_OTEL_EXPORTER_OTLP_GRPC_ENDPOINT"
-	NETMON_OTLP_GRPC_DEFAULT_ENDPOINT = "localhost:4317"
-	NETMON_SPEED_SERVER_IDS           = "NETMON_SPEED_SERVER_IDS"
+	httpPortName                 = "NETMON_HTTP_PORT"
+	httpPortDefaultValue         = "8092"
+	otlpGRPCEndpointName         = "NETMON_OTLP_GRPC_ENDPOINT"
+	otlpGRPCEndpointDefaultValue = "localhost:4317"
+	speedServerIDs               = "NETMON_SPEED_SERVER_IDS"
 )
 
 var (
@@ -191,7 +191,7 @@ func speedHandlerFunc(serverIds []string) http.HandlerFunc {
 }
 
 func getPort() (int, error) {
-	port, err := getEnv(NETMON_HTTP_PORT, NETMON_HTTP_DEFAULT_PORT)
+	port, err := getEnv(httpPortName, httpPortDefaultValue)
 	if err != nil {
 		return 0, err
 	}
@@ -205,11 +205,11 @@ func getPort() (int, error) {
 }
 
 func getGRPCEndpoint() (string, error) {
-	return getEnv(NETMON_OTLP_GRPC_ENDPOINT, NETMON_OTLP_GRPC_DEFAULT_ENDPOINT)
+	return getEnv(otlpGRPCEndpointName, otlpGRPCEndpointDefaultValue)
 }
 
 func getServerIDs() ([]string, error) {
-	ids, err := getEnv(NETMON_SPEED_SERVER_IDS, "")
+	ids, err := getEnv(speedServerIDs, "")
 	if err != nil {
 		return nil, err
 	}
