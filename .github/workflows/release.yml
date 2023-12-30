@@ -9,7 +9,7 @@ env:
 
 jobs:
   publish:
-    name: Publish docker image to registry
+    name: Release netmon in local k8s
     runs-on: ubuntu-latest
     steps:
       - name: Check out source code
@@ -45,7 +45,7 @@ jobs:
         uses: azure/setup-kubectl@v3
         id: install
 
-      - name: Set up kubectl
+      - name: Set up kubectl context
         uses: azure/k8s-set-context@v1
         with:
           method: kubeconfig
@@ -56,17 +56,17 @@ jobs:
         uses: azure/k8s-deploy@v1
         with:
           manifests: |
-            ./k8s/deployment_service.yaml            
+            /k8s/deployment_service.yaml            
           images: |
             ghcr.io/mantzas/netmon:${{ env.RELEASE_VERSION }}
           imagepullsecrets: |
             ${{ secrets.MANTZAS_GH_TOKEN }}
-          namespace: netmon
+          namespace: netmon         
 
       - name: Deploy cronjobs
         uses: azure/k8s-deploy@v1
         with:
           manifests: |
-            ./k8s/cronjobs.yaml
+            /k8s/cronjobs.yaml
           namespace: netmon
           
