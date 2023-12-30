@@ -16,7 +16,7 @@ spec:
               image: curlimages/curl:latest
               imagePullPolicy: IfNotPresent
               command: ["curl"]
-              args: ["netmon-service.default.svc.cluster.local:80/api/v1/speed"]
+              args: ["netmon-service.netmon.svc.cluster.local:80/api/v1/speed"]
           restartPolicy: OnFailure
 ---
 apiVersion: batch/v1
@@ -37,5 +37,5 @@ spec:
               image: curlimages/curl:latest
               imagePullPolicy: IfNotPresent
               command: ["curl"]
-              args: ["netmon-service.default.svc.cluster.local:80/api/v1/ping"]
+              args: ["netmon-service.netmon.svc.cluster.local:80/api/v1/ping"]
           restartPolicy: OnFailure
