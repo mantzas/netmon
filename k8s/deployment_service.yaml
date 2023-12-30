@@ -20,10 +20,12 @@ spec:
         ports:
         - containerPort: 80
         env:
-        - name: HTTP_PORT
+        - name: NETMON_HTTP_PORT
           value: "80"
-        - name: SPEED_SERVER_IDS
+        - name: NETMON_SPEED_SERVER_IDS
           value: "5188"
+        - name: NETMON_OTLP_GRPC_ENDPOINT
+          value: "grafana-k8s-monitoring-grafana-agent.observability.svc.cluster.local:4317"
         resources:
           limits:
             cpu: "1"
