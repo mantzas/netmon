@@ -1,4 +1,4 @@
-name: Docker image creation
+name: Release
 on:
   release:
     types: [published]
@@ -10,7 +10,7 @@ env:
 jobs:
   publish:
     name: Release netmon in local k8s
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted]
     steps:
       - name: Check out source code
         uses: actions/checkout@v4
