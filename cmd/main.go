@@ -167,9 +167,9 @@ type speedResponse struct {
 	Results []netmon.SpeedResult `json:"results"`
 }
 
-func speedHandlerFunc(serverIds []string) http.HandlerFunc {
+func speedHandlerFunc(serverIDs []string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		results := netmon.Speed(r.Context(), serverIds)
+		results := netmon.Speed(r.Context(), serverIDs)
 
 		response, err := json.Marshal(speedResponse{Results: results})
 		if err != nil {
