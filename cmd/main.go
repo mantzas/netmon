@@ -23,7 +23,7 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
 	"go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.21.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.24.0"
 )
 
 const (
@@ -34,10 +34,11 @@ const (
 	speedServerIDs               = "NETMON_SPEED_SERVER_IDS"
 )
 
-var (
-	serviceName    = "netmon"
-	serviceVersion = "0.1.0"
+const (
+	serviceName = "netmon"
 )
+
+var serviceVersion = "0.1.0"
 
 func main() {
 	err := run()
