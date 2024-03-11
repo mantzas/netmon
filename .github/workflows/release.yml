@@ -46,7 +46,7 @@ jobs:
         id: install
 
       - name: Set up kubectl context
-        uses: azure/k8s-set-context@v3
+        uses: azure/k8s-set-context@v4
         with:
           method: kubeconfig
           kubeconfig: ${{ secrets.LOCALK8S_KUBECONFIG }}          
