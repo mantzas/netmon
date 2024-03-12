@@ -42,7 +42,7 @@ jobs:
           build-args: GH_TOKEN=${{ secrets.MANTZAS_GH_TOKEN }}
 
       - name: Set up kubectl
-        uses: azure/setup-kubectl@v3
+        uses: azure/setup-kubectl@v4
         id: install
 
       - name: Set up kubectl context
