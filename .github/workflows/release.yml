@@ -53,7 +53,7 @@ jobs:
         id: setcontext
 
       - name: Deploy service
-        uses: azure/k8s-deploy@v4
+        uses: azure/k8s-deploy@v5
         with:
           manifests: |
             k8s/deployment_service.yaml            
@@ -64,7 +64,7 @@ jobs:
           namespace: netmon         
 
       - name: Deploy cronjobs
-        uses: azure/k8s-deploy@v4
+        uses: azure/k8s-deploy@v5
         with:
           manifests: |
             k8s/cronjobs.yaml
