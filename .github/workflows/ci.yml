@@ -18,6 +18,6 @@ jobs:
           go-version-file: 'go.mod'
         
       - name: Linting
-        uses: golangci/golangci-lint-action@v4
+        uses: golangci/golangci-lint-action@v5
         with:
           version: latest
