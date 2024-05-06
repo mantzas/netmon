@@ -48,8 +48,8 @@ type Server struct {
 	MaxLatency   time.Duration `json:"max_latency"`
 	MinLatency   time.Duration `json:"min_latency"`
 	Jitter       time.Duration `json:"jitter"`
-	DLSpeed      float64       `json:"dl_speed"`
-	ULSpeed      float64       `json:"ul_speed"`
+	DLSpeed      ByteRate      `json:"dl_speed"`
+	ULSpeed      ByteRate      `json:"ul_speed"`
 	TestDuration TestDuration  `json:"test_duration"`
 
 	Context *Speedtest `json:"-"`
@@ -222,7 +222,7 @@ func (s *Speedtest) FetchServerListContext(ctx context.Context) (Servers, error)
 		return Servers{}, err
 	}
 
-	payloadType := typeJSONPayload
+	_payloadType := typeJSONPayload
 
 	if resp.ContentLength == 0 {
 		_ = resp.Body.Close()
@@ -237,14 +237,14 @@ func (s *Speedtest) FetchServerListContext(ctx context.Context) (Servers, error)
 			return Servers{}, err
 		}
 
-		payloadType = typeXMLPayload
+		_payloadType = typeXMLPayload
 	}
 
 	defer resp.Body.Close()
 
 	var servers Servers
 
-	switch payloadType {
+	switch _payloadType {
 	case typeJSONPayload:
 		// Decode xml
 		decoder := json.NewDecoder(resp.Body)
@@ -360,14 +360,14 @@ func (servers Servers) FindServer(serverID []int) (Servers, error) {
 
 	if len(retServer) == 0 {
 		// choose the lowest latency server
-		var min int64 = math.MaxInt64
+		var minLatency int64 = math.MaxInt64
 		var minServerIndex int
 		for index, server := range servers {
 			if server.Latency <= 0 {
 				continue
 			}
-			if min > server.Latency.Milliseconds() {
-				min = server.Latency.Milliseconds()
+			if minLatency > server.Latency.Milliseconds() {
+				minLatency = server.Latency.Milliseconds()
 				minServerIndex = index
 			}
 		}
