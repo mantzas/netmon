@@ -144,8 +144,8 @@ func Speed(ctx context.Context, serverIDs []string) []SpeedResult {
 			continue
 		}
 
-		result.DL = server.DLSpeed
-		speedGauge.WithLabelValues(serverName, "dl").Set(server.DLSpeed)
+		result.DL = float64(server.DLSpeed)
+		speedGauge.WithLabelValues(serverName, "dl").Set(float64(server.DLSpeed))
 
 		err = uploadTest(ctx, tracer, server)
 		if err != nil {
@@ -154,8 +154,8 @@ func Speed(ctx context.Context, serverIDs []string) []SpeedResult {
 			continue
 		}
 
-		result.UL = server.ULSpeed
-		speedGauge.WithLabelValues(serverName, "ul").Set(server.ULSpeed)
+		result.UL = float64(server.ULSpeed)
+		speedGauge.WithLabelValues(serverName, "ul").Set(float64(server.ULSpeed))
 		results = append(results, result)
 
 		slog.Debug("speed measurement", "server", serverName, "latency", server.Latency, "dl", server.DLSpeed,
