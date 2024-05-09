@@ -27,8 +27,8 @@ github.com/prometheus/common v0.48.0 h1:QO8U2CdOzSn1BBsmXJXduaaW+dY/5QLjfB8svtSz
 github.com/prometheus/common v0.48.0/go.mod h1:0/KsvlIEfPQCQ5I2iNSAWKPZziNCvRs5EC6ILDTlAPc=
 github.com/prometheus/procfs v0.12.0 h1:jluTpSng7V9hY0O2R9DzzJHYb2xULk9VTR1V1R/k6Bo=
 github.com/prometheus/procfs v0.12.0/go.mod h1:pcuDEFsWDnvcgNzo4EEweacyhjeA9Zk3cnaOZAZEfOo=
-github.com/showwin/speedtest-go v1.7.2 h1:+MzmucIN1rzu66SZcE1d+ckpRssyg7H4nS5eXMLMPdc=
-github.com/showwin/speedtest-go v1.7.2/go.mod h1:uLgdWCNarXxlYsL2E5TOZpCIwpgSWnEANZp7gfHXHu0=
+github.com/showwin/speedtest-go v1.7.3 h1:ow4v5ffdowY1MeW210r7WSunn2DT1WY0WXtWiUypUKc=
+github.com/showwin/speedtest-go v1.7.3/go.mod h1:uLgdWCNarXxlYsL2E5TOZpCIwpgSWnEANZp7gfHXHu0=
 github.com/stretchr/testify v1.9.0 h1:HtqpIVDClZ4nwg75+f6Lvsy/wHu+3BoSGCbBAcpTsTg=
 github.com/stretchr/testify v1.9.0/go.mod h1:r2ic/lqez/lEtzL7wO/rwa5dbSLXVDPFyf8C91i36aY=
 go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.51.0 h1:Xs2Ncz0gNihqu9iosIZ5SkBbWo5T8JhhLJFMQL1qmLI=
