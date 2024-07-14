@@ -4,13 +4,11 @@ go 1.22
 
 require (
 	github.com/prometheus/client_golang v1.19.1
-	github.com/showwin/speedtest-go v1.7.7
+	github.com/showwin/speedtest-go v1.7.8
 	go.opentelemetry.io/otel v1.28.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.28.0
 	go.opentelemetry.io/otel/sdk v1.28.0
 )
-
-require github.com/google/uuid v1.6.0 // indirect
 
 require (
 	github.com/beorn7/perks v1.0.1 // indirect
@@ -19,6 +17,7 @@ require (
 	github.com/felixge/httpsnoop v1.0.4 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
+	github.com/google/uuid v1.6.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.20.0 // indirect
 	github.com/prometheus/client_model v0.6.0 // indirect
 	github.com/prometheus/common v0.48.0 // indirect
