@@ -122,7 +122,7 @@ func createHTTPServer(port int, servers []string) *http.Server {
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	handleFunc("/api/v1/ping", pingHandler)
+	handleFunc("/api/v1/ping", pingHandlerFunc(servers))
 	handleFunc("/api/v1/speed", speedHandlerFunc(servers))
 
 	return &http.Server{
@@ -139,28 +139,30 @@ type pingResponse struct {
 	Results []netmon.PingResult `json:"results"`
 }
 
-func pingHandler(w http.ResponseWriter, r *http.Request) {
-	results, err := netmon.Ping(r.Context())
-	if err != nil {
-		slog.ErrorContext(r.Context(), "ping failed", "err", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
+func pingHandlerFunc(serverIDs []string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		results, err := netmon.Ping(r.Context(), serverIDs)
+		if err != nil {
+			slog.ErrorContext(r.Context(), "ping failed", "err", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 
-	response, err := json.Marshal(pingResponse{Results: results})
-	if err != nil {
-		slog.ErrorContext(r.Context(), "failed to marshal results to JSON", "err", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
+		response, err := json.Marshal(pingResponse{Results: results})
+		if err != nil {
+			slog.ErrorContext(r.Context(), "failed to marshal results to JSON", "err", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_, err = w.Write(response)
-	if err != nil {
-		slog.ErrorContext(r.Context(), "failed to write response", "err", err)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, err = w.Write(response)
+		if err != nil {
+			slog.ErrorContext(r.Context(), "failed to write response", "err", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 	}
 }
 

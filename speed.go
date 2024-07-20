@@ -47,37 +47,31 @@ type PingResult struct {
 }
 
 // Ping runs a ping test against the provided servers.
-func Ping(ctx context.Context) ([]PingResult, error) {
+func Ping(ctx context.Context, serverIDs []string) ([]PingResult, error) {
 	now := time.Now()
 
 	span := trace.SpanFromContext(ctx)
 	tracer := span.TracerProvider().Tracer("netmon")
 
-	servers, err := fetchServers(ctx, tracer)
-	if err != nil {
-		return nil, err
-	}
+	results := make([]PingResult, 0, len(serverIDs))
 
-	results := make([]PingResult, 0, len(servers))
+	for _, serverID := range serverIDs {
+		result := PingResult{
+			ServerID: serverID,
+		}
 
-	for _, server := range servers {
+		server, err := fetchServerByID(ctx, tracer, serverID)
+		if err != nil {
+			result.Err = fmt.Errorf("failed to fetch server: %w", err)
+			results = append(results, result)
+			continue
+		}
+
 		results = append(results, pingTest(ctx, tracer, server))
 	}
 
 	slog.Debug("ping measurement", "duration", time.Since(now))
 	return results, nil
-}
-
-func fetchServers(ctx context.Context, tracer trace.Tracer) ([]*speedtest.Server, error) {
-	ctx, sp := tracer.Start(ctx, "FetchServers")
-	defer sp.End()
-
-	servers, err := speedtest.FetchServerListContext(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch servers: %w", err)
-	}
-
-	return servers, nil
 }
 
 func pingTest(ctx context.Context, tracer trace.Tracer, server *speedtest.Server) PingResult {

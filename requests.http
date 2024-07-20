@@ -1,0 +1,19 @@
+GET http://localhost:8092/api/v1/ping
+
+###
+
+GET http://localhost:8092/api/v1/speed
+
+###
+
+GET http://localhost:8092/health
+
+###110
+
+GET http://localhost:8092/ready
+
+###110
+
+GET http://localhost:8092/metrics
+	
+	
