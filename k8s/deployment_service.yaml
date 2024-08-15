@@ -12,7 +12,7 @@ spec:
   template:
     metadata:
       labels:
-        app: netmon      
+        app: netmon
     spec:
       containers:
       - name: netmon
@@ -22,10 +22,8 @@ spec:
         env:
         - name: NETMON_HTTP_PORT
           value: "80"
-        - name: NETMON_SPEED_SERVER_IDS
-          value: "5188"
-        - name: NETMON_OTLP_GRPC_ENDPOINT
-          value: "grafana-k8s-monitoring-grafana-agent.observability.svc.cluster.local:4317"
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: "http://grafana-k8s-monitoring-alloy.observability.svc.cluster.local:4317"
         resources:
           limits:
             cpu: "1"

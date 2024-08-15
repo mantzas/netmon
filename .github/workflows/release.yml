@@ -5,7 +5,8 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+  IMAGE_NAME_SRV: ${{ github.repository }}
+  IMAGE_NAME_CLI: "${{ github.repository }}-cli"
 
 jobs:
   publish:
@@ -32,13 +33,24 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push
+      - name: Build and push server image
         uses: docker/build-push-action@v6
         with:
           context: .
+          file: ./Dockerfile.server
           platforms: linux/amd64
           push: true
-          tags: "${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest,${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.RELEASE_VERSION }}"
+          tags: "${{ env.REGISTRY }}/${{ env.IMAGE_NAME_SRV }}:latest,${{ env.REGISTRY }}/${{ env.IMAGE_NAME_SRV }}:${{ env.RELEASE_VERSION }}"
+          build-args: GH_TOKEN=${{ secrets.MANTZAS_GH_TOKEN }}
+
+      - name: Build and push cli image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.cli
+          platforms: linux/amd64
+          push: true
+          tags: "${{ env.REGISTRY }}/${{ env.IMAGE_NAME_CLI }}:latest,${{ env.REGISTRY }}/${{ env.IMAGE_NAME_CLI }}:${{ env.RELEASE_VERSION }}"
           build-args: GH_TOKEN=${{ secrets.MANTZAS_GH_TOKEN }}
 
       - name: Set up kubectl
@@ -61,12 +73,23 @@ jobs:
             ghcr.io/mantzas/netmon:${{ env.RELEASE_VERSION }}
           imagepullsecrets: |
             ${{ secrets.MANTZAS_GH_TOKEN }}
-          namespace: netmon         
+          namespace: netmon
 
-      - name: Deploy cronjobs
+      - name: Deploy ping cronjob
         uses: azure/k8s-deploy@v5
         with:
           manifests: |
-            k8s/cronjobs.yaml
+            k8s/cronjob_ping.yaml
+          images: |
+            ghcr.io/mantzas/netmon-cli:${{ env.RELEASE_VERSION }}
           namespace: netmon
-          
+      
+      - name: Deploy speed cronjob
+        uses: azure/k8s-deploy@v5
+        with:
+          manifests: |
+            k8s/cronjob_speed.yaml
+          images: |
+            ghcr.io/mantzas/netmon-cli:${{ env.RELEASE_VERSION }}
+          namespace: netmon
+
