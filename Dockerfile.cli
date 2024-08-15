@@ -8,4 +8,4 @@ FROM bitnami/minideb:stretch
 WORKDIR /app
 COPY --from=builder /app/netmon-cli .
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-CMD ["./netmon-cli"]
+ENTRYPOINT [ "./netmon-cli" ]

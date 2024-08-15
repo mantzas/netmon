@@ -12,12 +12,30 @@ jobs:
       - name: Check out
         uses: actions/checkout@v4
 
+      - name: Linting Dockerfile for server
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: Dockerfile.server
+
+      - name: Linting Dockerfile for cli
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: Dockerfile.cli
+
+      - name: Linting Kubernetes manifests
+        uses: azure/k8s-lint@v1
+        with:
+          lintType: kubeconform
+          manifests: |
+            k8s/deployment_service.yaml
+            k8s/cronjobs.yaml
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
           go-version-file: 'go.mod'
-        
-      - name: Linting
+
+      - name: Linting Go
         uses: golangci/golangci-lint-action@v6
         with:
           version: latest
