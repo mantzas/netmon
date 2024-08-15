@@ -18,6 +18,9 @@ spec:
               command: ["curl"]
               args: ["netmon-service.netmon.svc.cluster.local:80/api/v1/speed"]
           restartPolicy: OnFailure
+          env:
+            - name: NETMON_SPEED_SERVER_IDS
+              value: "5188"
 ---
 apiVersion: batch/v1
 kind: CronJob
@@ -39,3 +42,6 @@ spec:
               command: ["curl"]
               args: ["netmon-service.netmon.svc.cluster.local:80/api/v1/ping"]
           restartPolicy: OnFailure
+          env:
+            - name: NETMON_SPEED_SERVER_IDS
+              value: "5188"

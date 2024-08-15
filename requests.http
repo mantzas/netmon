@@ -1,8 +1,8 @@
-GET http://localhost:8092/api/v1/ping
+GET http://localhost:8092/api/v1/ping/5188
 
 ###
 
-GET http://localhost:8092/api/v1/speed
+GET http://localhost:8092/api/v1/speed/5188
 
 ###
 

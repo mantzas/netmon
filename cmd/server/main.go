@@ -35,7 +35,6 @@ const (
 	httpPortDefaultValue         = "8092"
 	otlpGRPCEndpointName         = "NETMON_OTLP_GRPC_ENDPOINT"
 	otlpGRPCEndpointDefaultValue = "localhost:4317"
-	speedServerIDs               = "NETMON_SPEED_SERVER_IDS"
 )
 
 const (
@@ -52,11 +51,6 @@ func main() {
 }
 
 func run() error {
-	servers, err := getServerIDs()
-	if err != nil {
-		return err
-	}
-
 	port, err := getPort()
 	if err != nil {
 		return err
@@ -67,7 +61,7 @@ func run() error {
 		return err
 	}
 
-	slog.Info("start monitoring", "port", port, "servers", servers)
+	slog.Info("start monitoring", "port", port)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -80,7 +74,7 @@ func run() error {
 		err = errors.Join(err, otelShutdown(context.Background()))
 	}()
 
-	srv := createHTTPServer(port, servers)
+	srv := createHTTPServer(port)
 
 	srvErr := make(chan error, 1)
 
@@ -110,7 +104,7 @@ func run() error {
 	return nil
 }
 
-func createHTTPServer(port int, servers []string) *http.Server {
+func createHTTPServer(port int) *http.Server {
 	mux := http.NewServeMux()
 	handleFunc := func(pattern string, hd func(http.ResponseWriter, *http.Request)) {
 		handler := otelhttp.WithRouteTag(pattern, http.HandlerFunc(hd))
@@ -119,17 +113,16 @@ func createHTTPServer(port int, servers []string) *http.Server {
 	}
 
 	mux.Handle("/metrics", promhttp.Handler())
-	mux.HandleFunc("/health", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-	mux.HandleFunc("/ready", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	}))
-
-	handleFunc("/api/v1/ping", pingHandlerFunc(servers))
-	handleFunc("/api/v1/speed", speedHandlerFunc(servers))
-
 	mux.Handle("/debug/pprof/", http.DefaultServeMux)
+	mux.HandleFunc("GET /health", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	mux.HandleFunc("GET /ready", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	handleFunc("GET /api/v1/ping/{ids}", pingHandlerFunc())
+	handleFunc("GET /api/v1/speed/{ids}", speedHandlerFunc())
 
 	return &http.Server{
 		Addr:              fmt.Sprintf(":%d", port),
@@ -145,8 +138,24 @@ type pingResponse struct {
 	Results []netmon.PingResult `json:"results"`
 }
 
-func pingHandlerFunc(serverIDs []string) http.HandlerFunc {
+func getServerIDs(r *http.Request) ([]string, error) {
+	idsString := r.PathValue("ids")
+	if idsString == "" {
+		return nil, fmt.Errorf("ping failed. missing server ids value")
+	}
+
+	return strings.Split(idsString, ","), nil
+}
+
+func pingHandlerFunc() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		serverIDs, err := getServerIDs(r)
+		if err != nil {
+			slog.ErrorContext(r.Context(), "missing server ids in ping request", "err", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
 		results, err := netmon.Ping(r.Context(), serverIDs)
 		if err != nil {
 			slog.ErrorContext(r.Context(), "ping failed", "err", err)
@@ -176,8 +185,15 @@ type speedResponse struct {
 	Results []netmon.SpeedResult `json:"results"`
 }
 
-func speedHandlerFunc(serverIDs []string) http.HandlerFunc {
+func speedHandlerFunc() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		serverIDs, err := getServerIDs(r)
+		if err != nil {
+			slog.ErrorContext(r.Context(), "missing server ids in speed request", "err", err)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+
 		results := netmon.Speed(r.Context(), serverIDs)
 
 		response, err := json.Marshal(speedResponse{Results: results})
@@ -214,21 +230,6 @@ func getPort() (int, error) {
 
 func getGRPCEndpoint() (string, error) {
 	return getEnv(otlpGRPCEndpointName, otlpGRPCEndpointDefaultValue)
-}
-
-func getServerIDs() ([]string, error) {
-	ids, err := getEnv(speedServerIDs, "")
-	if err != nil {
-		return nil, err
-	}
-
-	serverIDs := strings.Split(ids, ",")
-
-	if len(serverIDs) == 0 {
-		return nil, fmt.Errorf("no valid server ids provided in the env var")
-	}
-
-	return serverIDs, nil
 }
 
 func getEnv(key string, def string) (string, error) {

@@ -2,7 +2,7 @@ FROM golang:1.22 as builder
 RUN update-ca-certificates
 WORKDIR /app
 COPY . ./
-RUN CGO_ENABLED=0 GOOS=linux go build -a -o netmon ./cmd/main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -a -o netmon ./cmd/server/main.go
 
 FROM bitnami/minideb:stretch
 WORKDIR /app
