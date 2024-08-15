@@ -17,10 +17,10 @@ spec:
               imagePullPolicy: IfNotPresent
               command: ["netmon-cli"]
               args: ["-cmd","speed"]
+              env:
+                - name: OTEL_EXPORTER_OTLP_ENDPOINT
+                  value: "grafana-k8s-monitoring-grafana-agent.observability.svc.cluster.local:4317"
           restartPolicy: OnFailure
-          env:
-            - name: OTEL_EXPORTER_OTLP_ENDPOINT
-              value: "grafana-k8s-monitoring-grafana-agent.observability.svc.cluster.local:4317"
 ---
 apiVersion: batch/v1
 kind: CronJob
@@ -41,7 +41,7 @@ spec:
               imagePullPolicy: IfNotPresent
               command: ["netmon-cli"]
               args: ["-cmd","ping"]
+              env:
+                - name: OTEL_EXPORTER_OTLP_ENDPOINT
+                  value: "grafana-k8s-monitoring-grafana-agent.observability.svc.cluster.local:4317"
           restartPolicy: OnFailure
-          env:
-            - name: OTEL_EXPORTER_OTLP_ENDPOINT
-              value: "grafana-k8s-monitoring-grafana-agent.observability.svc.cluster.local:4317"
