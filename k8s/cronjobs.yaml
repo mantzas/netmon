@@ -15,7 +15,7 @@ spec:
             - name: netmon-cronjob-speed
               image: ghcr.io/mantzas/netmon-cli:latest
               imagePullPolicy: IfNotPresent
-              command: ["netmon-cli"]
+              command: ["./netmon-cli"]
               args: ["-cmd","speed"]
               env:
                 - name: OTEL_EXPORTER_OTLP_ENDPOINT
@@ -39,7 +39,7 @@ spec:
             - name: netmon-cronjob-ping
               image: ghcr.io/mantzas/netmon-cli:latest
               imagePullPolicy: IfNotPresent
-              command: ["netmon-cli"]
+              command: ["./netmon-cli"]
               args: ["-cmd","ping"]
               env:
                 - name: OTEL_EXPORTER_OTLP_ENDPOINT
