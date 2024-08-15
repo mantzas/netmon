@@ -24,6 +24,8 @@ jobs:
 
       - name: Set up kubectl
         uses: azure/setup-kubectl@v4
+        with:
+          version: 1.29.0
         id: install
 
       - name: Set up kubectl context
