@@ -75,21 +75,13 @@ jobs:
             ${{ secrets.MANTZAS_GH_TOKEN }}
           namespace: netmon
 
-      - name: Deploy ping cronjob
+      - name: Deploy cronjobs
         uses: azure/k8s-deploy@v5
         with:
           manifests: |
-            k8s/cronjob_ping.yaml
+            k8s/cronjobs.yaml
           images: |
             ghcr.io/mantzas/netmon-cli:${{ env.RELEASE_VERSION }}
           namespace: netmon
-      
-      - name: Deploy speed cronjob
-        uses: azure/k8s-deploy@v5
-        with:
-          manifests: |
-            k8s/cronjob_speed.yaml
-          images: |
-            ghcr.io/mantzas/netmon-cli:${{ env.RELEASE_VERSION }}
-          namespace: netmon
+
 
