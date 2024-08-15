@@ -18,7 +18,7 @@ spec:
               args: ["-cmd","ping"]
               env:
                 - name: OTEL_EXPORTER_OTLP_ENDPOINT
-                  value: "grafana-k8s-monitoring-grafana-agent.observability.svc.cluster.local:4317"
+                  value: "http://grafana-k8s-monitoring-alloy.observability.svc.cluster.local:4317"
                 - name: NETMON_SERVER_URL
                   value: "http://netmon-service.netmon.svc.cluster.local:80"
           restartPolicy: OnFailure
