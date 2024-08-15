@@ -28,7 +28,8 @@ jobs:
           lintType: kubeconform
           manifests: |
             k8s/deployment_service.yaml
-            k8s/cronjobs.yaml
+            k8s/cronjob_ping.yaml
+            k8s/cronjob_speed.yaml
 
       - name: Set up Go
         uses: actions/setup-go@v5

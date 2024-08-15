@@ -1,0 +1,22 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: netmon-cronjob-ping
+spec:
+  schedule: "*/5 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: netmon-cronjob-ping
+              image: ghcr.io/mantzas/netmon-cli:latest
+              imagePullPolicy: IfNotPresent
+              args: ["-cmd","ping"]
+              env:
+                - name: OTEL_EXPORTER_OTLP_ENDPOINT
+                  value: "grafana-k8s-monitoring-grafana-agent.observability.svc.cluster.local:4317"
+          restartPolicy: OnFailure
