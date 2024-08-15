@@ -19,4 +19,6 @@ spec:
               env:
                 - name: OTEL_EXPORTER_OTLP_ENDPOINT
                   value: "grafana-k8s-monitoring-grafana-agent.observability.svc.cluster.local:4317"
+                - name: NETMON_SERVER_URL
+                  value: "netmon-service.netmon.svc.cluster.local:80"
           restartPolicy: OnFailure
