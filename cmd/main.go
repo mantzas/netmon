@@ -15,6 +15,10 @@ import (
 	"syscall"
 	"time"
 
+	_ "net/http/pprof"
+
+	_ "github.com/grafana/pyroscope-go/godeltaprof/http/pprof"
+
 	"github.com/mantzas/netmon"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -124,6 +128,8 @@ func createHTTPServer(port int, servers []string) *http.Server {
 
 	handleFunc("/api/v1/ping", pingHandlerFunc(servers))
 	handleFunc("/api/v1/speed", speedHandlerFunc(servers))
+
+	mux.Handle("/debug/pprof/", http.DefaultServeMux)
 
 	return &http.Server{
 		Addr:              fmt.Sprintf(":%d", port),

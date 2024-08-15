@@ -3,12 +3,15 @@ module github.com/mantzas/netmon
 go 1.22
 
 require (
+	github.com/grafana/pyroscope-go/godeltaprof v0.1.7
 	github.com/prometheus/client_golang v1.19.1
 	github.com/showwin/speedtest-go v1.7.8
 	go.opentelemetry.io/otel v1.28.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.28.0
 	go.opentelemetry.io/otel/sdk v1.28.0
 )
+
+require github.com/klauspost/compress v1.17.3 // indirect
 
 require (
 	github.com/beorn7/perks v1.0.1 // indirect
