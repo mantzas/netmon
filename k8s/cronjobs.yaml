@@ -13,14 +13,14 @@ spec:
         spec:
           containers:
             - name: netmon-cronjob-speed
-              image: curlimages/curl:8.5.0
+              image: ghcr.io/mantzas/netmon-cli:latest
               imagePullPolicy: IfNotPresent
-              command: ["curl"]
-              args: ["netmon-service.netmon.svc.cluster.local:80/api/v1/speed"]
+              command: ["netmon-cli"]
+              args: ["-cmd","speed"]
           restartPolicy: OnFailure
           env:
-            - name: NETMON_SPEED_SERVER_IDS
-              value: "5188"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "grafana-k8s-monitoring-grafana-agent.observability.svc.cluster.local:4317"
 ---
 apiVersion: batch/v1
 kind: CronJob
@@ -37,11 +37,11 @@ spec:
         spec:
           containers:
             - name: netmon-cronjob-ping
-              image: curlimages/curl:8.5.0
+              image: ghcr.io/mantzas/netmon-cli:latest
               imagePullPolicy: IfNotPresent
-              command: ["curl"]
-              args: ["netmon-service.netmon.svc.cluster.local:80/api/v1/ping"]
+              command: ["netmon-cli"]
+              args: ["-cmd","ping"]
           restartPolicy: OnFailure
           env:
-            - name: NETMON_SPEED_SERVER_IDS
-              value: "5188"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "grafana-k8s-monitoring-grafana-agent.observability.svc.cluster.local:4317"

@@ -22,7 +22,7 @@ spec:
         env:
         - name: NETMON_HTTP_PORT
           value: "80"
-        - name: NETMON_OTLP_GRPC_ENDPOINT
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
           value: "grafana-k8s-monitoring-grafana-agent.observability.svc.cluster.local:4317"
         resources:
           limits:

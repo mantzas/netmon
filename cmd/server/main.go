@@ -20,21 +20,14 @@ import (
 	_ "github.com/grafana/pyroscope-go/godeltaprof/http/pprof"
 
 	"github.com/mantzas/netmon"
+	"github.com/mantzas/netmon/otelsdk"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
-	"go.opentelemetry.io/otel/propagation"
-	"go.opentelemetry.io/otel/sdk/resource"
-	"go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
 )
 
 const (
-	httpPortName                 = "NETMON_HTTP_PORT"
-	httpPortDefaultValue         = "8092"
-	otlpGRPCEndpointName         = "NETMON_OTLP_GRPC_ENDPOINT"
-	otlpGRPCEndpointDefaultValue = "localhost:4317"
+	httpPortName         = "NETMON_HTTP_PORT"
+	httpPortDefaultValue = "8092"
 )
 
 const (
@@ -56,17 +49,12 @@ func run() error {
 		return err
 	}
 
-	gRPCEndpoint, err := getGRPCEndpoint()
-	if err != nil {
-		return err
-	}
-
 	slog.Info("start monitoring", "port", port)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	otelShutdown, err := setupOTelSDK(ctx, serviceName, serviceVersion, gRPCEndpoint)
+	otelShutdown, err := otelsdk.Setup(ctx, serviceName, serviceVersion)
 	if err != nil {
 		return err
 	}
@@ -156,6 +144,8 @@ func pingHandlerFunc() http.HandlerFunc {
 			return
 		}
 
+		slog.InfoContext(r.Context(), "ping request", "server_ids", serverIDs)
+
 		results, err := netmon.Ping(r.Context(), serverIDs)
 		if err != nil {
 			slog.ErrorContext(r.Context(), "ping failed", "err", err)
@@ -194,6 +184,8 @@ func speedHandlerFunc() http.HandlerFunc {
 			return
 		}
 
+		slog.InfoContext(r.Context(), "speed request", "server_ids", serverIDs)
+
 		results := netmon.Speed(r.Context(), serverIDs)
 
 		response, err := json.Marshal(speedResponse{Results: results})
@@ -228,10 +220,6 @@ func getPort() (int, error) {
 	return portInt, nil
 }
 
-func getGRPCEndpoint() (string, error) {
-	return getEnv(otlpGRPCEndpointName, otlpGRPCEndpointDefaultValue)
-}
-
 func getEnv(key string, def string) (string, error) {
 	value, ok := os.LookupEnv(key)
 	if !ok && def == "" {
@@ -247,82 +235,4 @@ func getEnv(key string, def string) (string, error) {
 	}
 
 	return "", fmt.Errorf("env var %s does not exist and no default value is set", key)
-}
-
-func setupOTelSDK(ctx context.Context, serviceName, serviceVersion, gRPCEndpoint string) (shutdown func(context.Context) error, err error) {
-	var shutdownFuncs []func(context.Context) error
-
-	// shutdown calls cleanup functions registered via shutdownFuncs.
-	// The errors from the calls are joined.
-	// Each registered cleanup will be invoked once.
-	shutdown = func(ctx context.Context) error {
-		var err error
-		for _, fn := range shutdownFuncs {
-			err = errors.Join(err, fn(ctx))
-		}
-		shutdownFuncs = nil
-		return err
-	}
-
-	// handleErr calls shutdown for cleanup and makes sure that all errors are returned.
-	handleErr := func(inErr error) {
-		err = errors.Join(inErr, shutdown(ctx))
-	}
-
-	// Set up resource.
-	res, err := newResource(serviceName, serviceVersion)
-	if err != nil {
-		handleErr(err)
-		return
-	}
-
-	// Set up propagator.
-	prop := newPropagator()
-	otel.SetTextMapPropagator(prop)
-
-	// Set up trace provider.
-	tracerProvider, err := newTraceProvider(ctx, gRPCEndpoint, res)
-	if err != nil {
-		handleErr(err)
-		return
-	}
-	shutdownFuncs = append(shutdownFuncs, tracerProvider.Shutdown)
-	otel.SetTracerProvider(tracerProvider)
-
-	return
-}
-
-func newResource(serviceName, serviceVersion string) (*resource.Resource, error) {
-	return resource.Merge(resource.Default(),
-		resource.NewWithAttributes(semconv.SchemaURL,
-			semconv.ServiceName(serviceName),
-			semconv.ServiceVersion(serviceVersion),
-		))
-}
-
-func newPropagator() propagation.TextMapPropagator {
-	return propagation.NewCompositeTextMapPropagator(
-		propagation.TraceContext{},
-		propagation.Baggage{},
-	)
-}
-
-func newTraceProvider(ctx context.Context, endpoint string, res *resource.Resource) (*trace.TracerProvider, error) {
-	options := []otlptracegrpc.Option{
-		otlptracegrpc.WithEndpoint(endpoint),
-		otlptracegrpc.WithInsecure(),
-		otlptracegrpc.WithTimeout(5 * time.Second),
-	}
-
-	traceExporter, err := otlptracegrpc.New(ctx, options...)
-	if err != nil {
-		return nil, err
-	}
-
-	traceProvider := trace.NewTracerProvider(
-		trace.WithBatcher(traceExporter, trace.WithBatchTimeout(5*time.Second)),
-		trace.WithResource(res),
-		trace.WithSampler(trace.AlwaysSample()),
-	)
-	return traceProvider, nil
 }
