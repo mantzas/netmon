@@ -1,4 +1,4 @@
-FROM golang:1.23 as builder
+FROM golang:1.22 as builder
 RUN update-ca-certificates
 WORKDIR /app
 COPY . ./

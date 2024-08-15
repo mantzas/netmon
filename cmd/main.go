@@ -15,7 +15,7 @@ import (
 	"syscall"
 	"time"
 
-	_ "net/http/pprof"
+	_ "net/http/pprof" // nolint:gosec
 
 	_ "github.com/grafana/pyroscope-go/godeltaprof/http/pprof"
 
