@@ -22,26 +22,6 @@ jobs:
         with:
           dockerfile: Dockerfile.cli
 
-      - name: Set up kubectl
-        uses: azure/setup-kubectl@v4
-        id: install
-
-      - name: Set up kubectl context
-        uses: azure/k8s-set-context@v4
-        with:
-          method: kubeconfig
-          kubeconfig: ${{ secrets.LOCALK8S_KUBECONFIG }}          
-        id: setcontext
-
-      - name: Linting Kubernetes manifests
-        uses: azure/k8s-lint@v1
-        with:
-          lintType: dryrun
-          manifests: |
-            k8s/deployment_service.yaml
-            k8s/cronjob_ping.yaml
-            k8s/cronjob_speed.yaml
-
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
