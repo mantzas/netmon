@@ -4,7 +4,7 @@ go 1.22
 
 require (
 	github.com/grafana/pyroscope-go/godeltaprof v0.1.8
-	github.com/prometheus/client_golang v1.20.0
+	github.com/prometheus/client_golang v1.20.2
 	github.com/showwin/speedtest-go v1.7.8
 	go.opentelemetry.io/otel v1.28.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.28.0
