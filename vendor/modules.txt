@@ -63,7 +63,7 @@ github.com/prometheus/common/model
 github.com/prometheus/procfs
 github.com/prometheus/procfs/internal/fs
 github.com/prometheus/procfs/internal/util
-# github.com/showwin/speedtest-go v1.7.8
+# github.com/showwin/speedtest-go v1.7.9
 ## explicit; go 1.19
 github.com/showwin/speedtest-go/speedtest
 github.com/showwin/speedtest-go/speedtest/internal
