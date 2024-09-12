@@ -68,8 +68,8 @@ github.com/prometheus/procfs/internal/util
 github.com/showwin/speedtest-go/speedtest
 github.com/showwin/speedtest-go/speedtest/internal
 github.com/showwin/speedtest-go/speedtest/transport
-# go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.54.0
-## explicit; go 1.21
+# go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.55.0
+## explicit; go 1.22
 go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp
 go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp/internal/request
 go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp/internal/semconv
