@@ -1,8 +1,6 @@
 module github.com/mantzas/netmon
 
-go 1.22.7
-
-toolchain go1.23.3
+go 1.23.4
 
 require (
 	github.com/grafana/pyroscope-go/godeltaprof v0.1.8
