@@ -8,7 +8,7 @@ require (
 	github.com/showwin/speedtest-go v1.7.10
 	go.opentelemetry.io/otel v1.35.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.34.0
-	go.opentelemetry.io/otel/sdk v1.34.0
+	go.opentelemetry.io/otel/sdk v1.35.0
 )
 
 require go.opentelemetry.io/auto/sdk v1.1.0 // indirect
