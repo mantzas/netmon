@@ -13,12 +13,12 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Linting Dockerfile for server
-        uses: hadolint/hadolint-action@v3.1.0
+        uses: hadolint/hadolint-action@v3.3.0
         with:
           dockerfile: Dockerfile.server
 
       - name: Linting Dockerfile for cli
-        uses: hadolint/hadolint-action@v3.1.0
+        uses: hadolint/hadolint-action@v3.3.0
         with:
           dockerfile: Dockerfile.cli
 
