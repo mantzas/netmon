@@ -39,7 +39,7 @@ func Setup(ctx context.Context, serviceName, serviceVersion string) (shutdown fu
 	res, err := newResource(serviceName, serviceVersion)
 	if err != nil {
 		handleErr(err)
-		return
+		return shutdown, err // nolint:gofumpt
 	}
 
 	// Set up propagator.
@@ -50,12 +50,12 @@ func Setup(ctx context.Context, serviceName, serviceVersion string) (shutdown fu
 	tracerProvider, err := newTraceProvider(ctx, res)
 	if err != nil {
 		handleErr(err)
-		return
+		return shutdown, err
 	}
 	shutdownFuncs = append(shutdownFuncs, tracerProvider.Shutdown)
 	otel.SetTracerProvider(tracerProvider)
 
-	return
+	return shutdown, err
 }
 
 func newResource(serviceName, serviceVersion string) (*resource.Resource, error) {
