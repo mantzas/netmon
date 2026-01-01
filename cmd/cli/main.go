@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"strings"
 
@@ -97,7 +98,16 @@ func executeRequest(ctx context.Context, args argument) error {
 
 	targetURL := args.serverURL + apiV1Prefix + args.cmd + "/" + strings.Join(args.serverIDs, ",")
 
-	resp, err := otelhttp.Get(ctx, targetURL)
+	client := http.Client{
+		Transport: otelhttp.NewTransport(http.DefaultTransport),
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, targetURL, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create %s request: %w", args.cmd, err)
+	}
+
+	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}

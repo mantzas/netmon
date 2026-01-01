@@ -95,8 +95,7 @@ func run() error {
 func createHTTPServer(port int) *http.Server {
 	mux := http.NewServeMux()
 	handleFunc := func(pattern string, hd func(http.ResponseWriter, *http.Request)) {
-		handler := otelhttp.WithRouteTag(pattern, http.HandlerFunc(hd))
-		otelHandler := otelhttp.NewHandler(handler, pattern)
+		otelHandler := otelhttp.NewHandler(http.HandlerFunc(hd), pattern)
 		mux.Handle(pattern, otelHandler)
 	}
 
