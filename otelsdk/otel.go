@@ -16,7 +16,7 @@ import (
 
 // Setup sets up the OpenTelemetry SDK with the provided service name, version, and gRPC endpoint.
 func Setup(ctx context.Context, serviceName, serviceVersion string) (shutdown func(context.Context) error, err error) {
-	var shutdownFuncs []func(context.Context) error
+	shutdownFuncs := make([]func(context.Context) error, 0, 1)
 
 	// shutdown calls cleanup functions registered via shutdownFuncs.
 	// The errors from the calls are joined.
