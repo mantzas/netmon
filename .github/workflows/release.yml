@@ -34,7 +34,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push server image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ./Dockerfile.server
@@ -44,7 +44,7 @@ jobs:
           build-args: GH_TOKEN=${{ secrets.MANTZAS_GH_TOKEN }}
 
       - name: Build and push cli image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ./Dockerfile.cli
