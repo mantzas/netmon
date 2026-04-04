@@ -1,14 +1,14 @@
 module github.com/mantzas/netmon
 
-go 1.24.0
+go 1.25.0
 
 require (
 	github.com/grafana/pyroscope-go/godeltaprof v0.1.9
 	github.com/prometheus/client_golang v1.23.2
 	github.com/showwin/speedtest-go v1.7.10
-	go.opentelemetry.io/otel v1.40.0
+	go.opentelemetry.io/otel v1.42.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.40.0
-	go.opentelemetry.io/otel/sdk v1.40.0
+	go.opentelemetry.io/otel/sdk v1.42.0
 )
 
 require (
@@ -30,13 +30,13 @@ require (
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.67.4 // indirect
 	github.com/prometheus/procfs v0.19.2 // indirect
-	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.65.0
+	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.67.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.40.0 // indirect
-	go.opentelemetry.io/otel/metric v1.40.0 // indirect
-	go.opentelemetry.io/otel/trace v1.40.0
+	go.opentelemetry.io/otel/metric v1.42.0 // indirect
+	go.opentelemetry.io/otel/trace v1.42.0
 	go.opentelemetry.io/proto/otlp v1.9.0 // indirect
 	golang.org/x/net v0.49.0 // indirect
-	golang.org/x/sys v0.40.0 // indirect
+	golang.org/x/sys v0.41.0 // indirect
 	golang.org/x/text v0.33.0 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20260128011058-8636f8732409 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20260128011058-8636f8732409 // indirect
