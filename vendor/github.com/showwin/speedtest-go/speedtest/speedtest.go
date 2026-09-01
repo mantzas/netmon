@@ -13,7 +13,7 @@ import (
 )
 
 var (
-	version          = "1.7.10"
+	version          = "1.8.2"
 	DefaultUserAgent = fmt.Sprintf("showwin/speedtest-go %s", version)
 )
 
@@ -25,6 +25,13 @@ const (
 	ICMP
 )
 
+type TestMode int
+
+const (
+	HTTPTest TestMode = iota
+	TCPTest
+)
+
 // Speedtest is a speedtest client.
 type Speedtest struct {
 	User *User
@@ -33,6 +40,7 @@ type Speedtest struct {
 	doer      *http.Client
 	config    *UserConfig
 	tcpDialer *net.Dialer
+	udpDialer *net.Dialer
 	ipDialer  *net.Dialer
 }
 
@@ -45,6 +53,7 @@ type UserConfig struct {
 	DialerControl func(network, address string, c syscall.RawConn) error
 	Debug         bool
 	PingMode      Proto
+	TestMode      TestMode
 
 	SavingMode     bool
 	MaxConnections int
@@ -90,6 +99,7 @@ func (s *Speedtest) NewUserConfig(uc *UserConfig) {
 	}
 
 	var tcpSource net.Addr // If nil, a local address is automatically chosen.
+	var udpSource net.Addr
 	var icmpSource net.Addr
 	var proxy = http.ProxyFromEnvironment
 	s.config = uc
@@ -98,11 +108,23 @@ func (s *Speedtest) NewUserConfig(uc *UserConfig) {
 	}
 	if len(uc.Source) > 0 {
 		_, address := parseAddr(uc.Source)
+
+		// Try as interface name first (Linux: SO_BINDTODEVICE)
+		if ifIP, ctrl, ok := resolveInterface(address); ok {
+			address = ifIP.String()
+			if uc.DialerControl == nil {
+				uc.DialerControl = ctrl
+			}
+		}
+
 		addr0, err := net.ResolveTCPAddr("tcp", fmt.Sprintf("[%s]:0", address)) // dynamic tcp port
 		if err == nil {
 			tcpSource = addr0
 		} else {
 			dbg.Printf("Warning: skipping parse the source address. err: %s\n", err.Error())
+		}
+		if sourceIP := net.ParseIP(address); sourceIP != nil {
+			udpSource = &net.UDPAddr{IP: sourceIP}
 		}
 		addr1, err := net.ResolveIPAddr("ip", address) // dynamic tcp port
 		if err == nil {
@@ -142,6 +164,13 @@ func (s *Speedtest) NewUserConfig(uc *UserConfig) {
 
 	s.tcpDialer = &net.Dialer{
 		LocalAddr: tcpSource,
+		Timeout:   30 * time.Second,
+		KeepAlive: 30 * time.Second,
+		Control:   uc.DialerControl,
+	}
+
+	s.udpDialer = &net.Dialer{
+		LocalAddr: udpSource,
 		Timeout:   30 * time.Second,
 		KeepAlive: 30 * time.Second,
 		Control:   uc.DialerControl,

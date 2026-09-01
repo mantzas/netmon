@@ -1,11 +1,11 @@
 module github.com/mantzas/netmon
 
-go 1.25.0
+go 1.26
 
 require (
 	github.com/grafana/pyroscope-go/godeltaprof v0.1.11
 	github.com/prometheus/client_golang v1.23.2
-	github.com/showwin/speedtest-go v1.7.10
+	github.com/showwin/speedtest-go v1.8.2
 	go.opentelemetry.io/otel v1.46.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.44.0
 	go.opentelemetry.io/otel/sdk v1.46.0
