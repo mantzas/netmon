@@ -4,15 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/showwin/speedtest-go/speedtest/transport"
 	"io"
 	"math"
+	"net"
 	"net/http"
 	"net/url"
 	"path"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"github.com/showwin/speedtest-go/speedtest/transport"
 )
 
 type (
@@ -48,7 +50,7 @@ func (s *Server) MultiDownloadTestContext(ctx context.Context, servers Servers) 
 		dbg.Printf("Register Download Handler: %s\n", sp.URL)
 		td = server.Context.RegisterDownloadHandler(func() {
 			atomic.AddInt64(&requestTimes, 1)
-			if err := downloadRequest(_context, sp, 3); err != nil {
+			if err := sp.downloadRequest()(_context, sp, 3); err != nil {
 				atomic.AddInt64(&errorTimes, 1)
 			}
 		})
@@ -83,7 +85,7 @@ func (s *Server) MultiUploadTestContext(ctx context.Context, servers Servers) er
 		dbg.Printf("Register Upload Handler: %s\n", sp.URL)
 		td = server.Context.RegisterUploadHandler(func() {
 			atomic.AddInt64(&requestTimes, 1)
-			if err := uploadRequest(_context, sp, 3); err != nil {
+			if err := sp.uploadRequest()(_context, sp, 3); err != nil {
 				atomic.AddInt64(&errorTimes, 1)
 			}
 		})
@@ -101,12 +103,12 @@ func (s *Server) MultiUploadTestContext(ctx context.Context, servers Servers) er
 
 // DownloadTest executes the test to measure download speed
 func (s *Server) DownloadTest() error {
-	return s.downloadTestContext(context.Background(), downloadRequest)
+	return s.downloadTestContext(context.Background(), s.downloadRequest())
 }
 
 // DownloadTestContext executes the test to measure download speed, observing the given context.
 func (s *Server) DownloadTestContext(ctx context.Context) error {
-	return s.downloadTestContext(ctx, downloadRequest)
+	return s.downloadTestContext(ctx, s.downloadRequest())
 }
 
 func (s *Server) downloadTestContext(ctx context.Context, downloadRequest downloadFunc) error {
@@ -132,12 +134,26 @@ func (s *Server) downloadTestContext(ctx context.Context, downloadRequest downlo
 
 // UploadTest executes the test to measure upload speed
 func (s *Server) UploadTest() error {
-	return s.uploadTestContext(context.Background(), uploadRequest)
+	return s.uploadTestContext(context.Background(), s.uploadRequest())
 }
 
 // UploadTestContext executes the test to measure upload speed, observing the given context.
 func (s *Server) UploadTestContext(ctx context.Context) error {
-	return s.uploadTestContext(ctx, uploadRequest)
+	return s.uploadTestContext(ctx, s.uploadRequest())
+}
+
+func (s *Server) downloadRequest() downloadFunc {
+	if s.Context.config.TestMode == TCPTest {
+		return tcpDownloadRequest
+	}
+	return downloadRequest
+}
+
+func (s *Server) uploadRequest() uploadFunc {
+	if s.Context.config.TestMode == TCPTest {
+		return tcpUploadRequest
+	}
+	return uploadRequest
 }
 
 func (s *Server) uploadTestContext(ctx context.Context, uploadRequest uploadFunc) error {
@@ -179,7 +195,7 @@ func downloadRequest(ctx context.Context, s *Server, w int) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	return s.Context.NewChunk().DownloadHandler(resp.Body)
 }
 
@@ -198,9 +214,88 @@ func uploadRequest(ctx context.Context, s *Server, w int) error {
 	if err != nil {
 		return err
 	}
-	_, _ = io.Copy(io.Discard, resp.Body)
-	defer resp.Body.Close()
-	return err
+	defer func() { _ = resp.Body.Close() }()
+	if _, err := io.Copy(io.Discard, resp.Body); err != nil {
+		return err
+	}
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return fmt.Errorf("upload request failed: %s", resp.Status)
+	}
+	// Treat a successful upload.php response as application-level upload confirmation.
+	s.Context.AddTotalUpload(chunkSize)
+	return nil
+}
+
+func tcpHost(s *Server) (string, error) {
+	host := s.Host
+	if host == "" {
+		u, err := url.Parse(s.URL)
+		if err != nil {
+			return "", err
+		}
+		if u.Hostname() == "" {
+			return "", errors.New("tcp server host is empty")
+		}
+		host = u.Host
+	}
+	if _, _, err := net.SplitHostPort(host); err == nil {
+		return host, nil
+	}
+	if strings.HasPrefix(host, "[") && strings.HasSuffix(host, "]") {
+		host = strings.TrimSuffix(strings.TrimPrefix(host, "["), "]")
+	}
+	return net.JoinHostPort(host, "8080"), nil
+}
+
+func tcpDownloadRequest(ctx context.Context, s *Server, w int) error {
+	host, err := tcpHost(s)
+	if err != nil {
+		return err
+	}
+	client, err := transport.NewClient(s.Context.tcpDialer)
+	if err != nil {
+		return err
+	}
+	if err = client.Connect(ctx, host); err != nil {
+		return err
+	}
+	defer func() { _ = client.Disconnect() }()
+	if _, err = client.VersionContext(ctx); err != nil {
+		return err
+	}
+	size := int64(dlSizes[w]) * 1000
+	return client.Download(ctx, size, s.Context.NewChunk().DownloadHandler)
+}
+
+func tcpUploadRequest(ctx context.Context, s *Server, w int) error {
+	host, err := tcpHost(s)
+	if err != nil {
+		return err
+	}
+	client, err := transport.NewClient(s.Context.tcpDialer)
+	if err != nil {
+		return err
+	}
+	if err = client.Connect(ctx, host); err != nil {
+		return err
+	}
+	defer func() { _ = client.Disconnect() }()
+	size := int64(ulSizes[w]) * 1000
+	payloadSize, err := transport.UploadPayloadSize(size)
+	if err != nil {
+		return err
+	}
+	dc := s.Context.NewChunk().UploadHandler(payloadSize)
+	acknowledged, err := client.Upload(ctx, size, dc)
+	if err != nil {
+		return err
+	}
+	overhead := size - payloadSize
+	if acknowledged < overhead {
+		return transport.ErrInvalidResponse
+	}
+	s.Context.AddTotalUpload(acknowledged - overhead)
+	return nil
 }
 
 // PingTest executes test to measure latency
@@ -212,11 +307,12 @@ func (s *Server) PingTest(callback func(latency time.Duration)) error {
 func (s *Server) PingTestContext(ctx context.Context, callback func(latency time.Duration)) (err error) {
 	start := time.Now()
 	var vectorPingResult []int64
-	if s.Context.config.PingMode == TCP {
+	switch s.Context.config.PingMode {
+	case TCP:
 		vectorPingResult, err = s.TCPPing(ctx, 10, time.Millisecond*200, callback)
-	} else if s.Context.config.PingMode == ICMP {
+	case ICMP:
 		vectorPingResult, err = s.ICMPPing(ctx, time.Second*4, 10, time.Millisecond*200, callback)
-	} else {
+	default:
 		vectorPingResult, err = s.HTTPPing(ctx, 10, time.Millisecond*200, callback)
 	}
 	if err != nil || len(vectorPingResult) == 0 {
@@ -268,6 +364,7 @@ func (s *Server) TCPPing(
 	if err != nil {
 		return nil, err
 	}
+	defer func() { _ = client.Disconnect() }()
 	err = client.Connect(ctx, pingDst)
 	if err != nil {
 		return nil, err
@@ -369,7 +466,7 @@ func (s *Server) ICMPPing(
 	if err != nil {
 		return nil, err
 	}
-	defer dialContext.Close()
+	defer func() { _ = dialContext.Close() }()
 
 	ICMPData := make([]byte, 8+echoOptionDataSize) // header + data
 	ICMPData[0] = 8                                // echo
