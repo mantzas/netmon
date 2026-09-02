@@ -3,7 +3,7 @@ module github.com/mantzas/netmon
 go 1.26
 
 require (
-	github.com/grafana/pyroscope-go/godeltaprof v0.1.11
+	github.com/grafana/pyroscope-go/godeltaprof v0.1.12
 	github.com/prometheus/client_golang v1.23.2
 	github.com/showwin/speedtest-go v1.8.2
 	go.opentelemetry.io/otel v1.46.0
